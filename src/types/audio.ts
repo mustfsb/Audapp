@@ -6,7 +6,8 @@ export type SectionId =
   | "equalizer"
   | "noise"
   | "profiles"
-  | "settings";
+  | "settings"
+  | "engine";
 
 export type LatencyMode = "Ultra Low" | "Balanced" | "Stable";
 export type DeviceKind = "input" | "output";

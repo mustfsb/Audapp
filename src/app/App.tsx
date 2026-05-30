@@ -27,6 +27,7 @@ import type {
 } from "@/types/audio";
 
 import { AppsView } from "@/components/apps/apps-view";
+import { EngineLabView } from "@/components/engine/engine-lab-view";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { DevicesView } from "@/components/devices/devices-view";
 import { EqualizerView } from "@/components/eq/equalizer-view";
@@ -45,6 +46,7 @@ const navigation = [
   { id: "noise", label: "Noise Suppression", description: "Microphone cleanup" },
   { id: "profiles", label: "Profiles", description: "Reusable scenes" },
   { id: "settings", label: "Settings", description: "Desktop behavior" },
+  { id: "engine", label: "Audio Engine Lab", description: "WASAPI test bench" },
 ] as const satisfies ReadonlyArray<{
   id: SectionId;
   label: string;
@@ -284,6 +286,12 @@ export default function App() {
           setSettings((current) => ({ ...current, latencyMode: value }));
           setEngineStatus((current) => ({ ...current, latencyMode: value }));
         }}
+      />
+    ),
+    engine: (
+      <EngineLabView
+        outputDevices={outputDevices}
+        inputDevices={discoveryDevices.filter((d) => d.kind === "input")}
       />
     ),
   } satisfies Record<SectionId, ReactElement>;

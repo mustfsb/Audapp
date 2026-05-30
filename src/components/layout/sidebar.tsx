@@ -1,4 +1,4 @@
-import { BarChart3, LayoutGrid, Mic2, MonitorSpeaker, Settings2, SlidersHorizontal, Sparkles, Waves, Workflow } from "lucide-react";
+import { BarChart3, FlaskConical, LayoutGrid, Mic2, MonitorSpeaker, Settings2, SlidersHorizontal, Sparkles, Waves, Workflow } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ const icons = {
   noise: Mic2,
   profiles: Sparkles,
   settings: Settings2,
+  engine: FlaskConical,
 };
 
 interface SidebarProps {
