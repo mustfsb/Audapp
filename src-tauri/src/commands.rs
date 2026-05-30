@@ -1,0 +1,119 @@
+use crate::audio::{
+    self, load_assignments, remove_assignment,
+    set_session_mute_with_snapshot, set_session_volume_with_snapshot, upsert_assignment,
+    AudioDiscoverySnapshot, AudioSessionControlResult, AudioSessionTarget,
+    ChannelAssignment, ChannelAssignmentMatch,
+};
+use serde::Deserialize;
+use serde::Serialize;
+use tauri::Manager;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineStatus {
+    state: String,
+    latency_mode: String,
+    cpu_load: u8,
+    audio_load: u8,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAudioSessionVolumeInput {
+    pub target: AudioSessionTarget,
+    pub volume_percent: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAudioSessionMuteInput {
+    pub target: AudioSessionTarget,
+    pub muted: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetChannelAssignmentInput {
+    pub channel_id: String,
+    #[serde(rename = "match")]
+    pub match_rule: ChannelAssignmentMatch,
+    pub label: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveChannelAssignmentInput {
+    pub assignment_id: String,
+}
+
+fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_local_data_dir()
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+}
+
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
+pub fn get_audio_engine_status() -> EngineStatus {
+    EngineStatus {
+        state: "Mock Ready".to_string(),
+        latency_mode: "Balanced".to_string(),
+        cpu_load: 22,
+        audio_load: 36,
+        warnings: vec![
+            "Audio routing and DSP are not implemented yet.".to_string(),
+            "Session volume/mute control is available from the Apps page.".to_string(),
+        ],
+    }
+}
+
+#[tauri::command]
+pub fn get_audio_discovery_snapshot() -> AudioDiscoverySnapshot {
+    audio::capture_discovery_snapshot()
+}
+
+#[tauri::command]
+pub fn set_audio_session_volume(input: SetAudioSessionVolumeInput) -> AudioSessionControlResult {
+    set_session_volume_with_snapshot(input.target, input.volume_percent)
+}
+
+#[tauri::command]
+pub fn set_audio_session_mute(input: SetAudioSessionMuteInput) -> AudioSessionControlResult {
+    set_session_mute_with_snapshot(input.target, input.muted)
+}
+
+#[tauri::command]
+pub fn get_channel_assignments(app: tauri::AppHandle) -> Result<Vec<ChannelAssignment>, String> {
+    let base_dir = app_data_dir(&app)?;
+    load_assignments(&base_dir).map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn set_channel_assignment(
+    app: tauri::AppHandle,
+    input: SetChannelAssignmentInput,
+) -> Result<ChannelAssignment, String> {
+    let base_dir = app_data_dir(&app)?;
+    upsert_assignment(
+        &base_dir,
+        input.channel_id,
+        input.match_rule,
+        input.label,
+    )
+    .map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn remove_channel_assignment(
+    app: tauri::AppHandle,
+    input: RemoveChannelAssignmentInput,
+) -> Result<(), String> {
+    let base_dir = app_data_dir(&app)?;
+    remove_assignment(&base_dir, &input.assignment_id).map_err(|error| error.message())
+}
+
