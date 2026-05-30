@@ -19,18 +19,24 @@ interface ChannelStripProps {
   channel: AudioChannel;
   outputDevices: AudioDevice[];
   onVolumeChange: (id: string, value: number) => void;
-  onMuteToggle: (id: string) => void;
+  onVolumeCommit: (id: string, value: number) => void;
+  onMuteToggle: (id: string, newMuted: boolean) => void;
   onSoloToggle: (id: string) => void;
   onOutputChange: (id: string, outputDeviceId: string) => void;
+  error?: string | null;
+  isPending?: boolean;
 }
 
 export function ChannelStrip({
   channel,
   outputDevices,
   onVolumeChange,
+  onVolumeCommit,
   onMuteToggle,
   onSoloToggle,
   onOutputChange,
+  error,
+  isPending,
 }: ChannelStripProps) {
   const selectedOutput = outputDevices.find((device) => device.id === channel.outputDeviceId);
 
@@ -42,7 +48,9 @@ export function ChannelStrip({
             <CardTitle>{channel.name}</CardTitle>
             <p className="text-sm text-muted-foreground capitalize">{channel.bucket}</p>
           </div>
-          <Badge variant={channel.solo ? "default" : "outline"}>{channel.solo ? "Solo" : "Ready"}</Badge>
+          <Badge variant={channel.solo ? "default" : "outline"}>
+            {channel.solo ? "Solo" : isPending ? "Applying…" : "Ready"}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -55,7 +63,9 @@ export function ChannelStrip({
             value={[channel.volume]}
             max={100}
             step={1}
+            disabled={isPending}
             onValueChange={(values) => onVolumeChange(channel.id, values[0] ?? channel.volume)}
+            onValueCommit={(values) => onVolumeCommit(channel.id, values[0] ?? channel.volume)}
           />
         </div>
 
@@ -83,9 +93,15 @@ export function ChannelStrip({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Routed to {selectedOutput?.name ?? "no device"}
+            {selectedOutput ? selectedOutput.name : "No output selected"}
           </p>
         </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
       </CardContent>
       <CardFooter className="gap-2 border-t border-border/60 pt-4">
         <Tooltip>
@@ -93,13 +109,14 @@ export function ChannelStrip({
             <Button
               variant={channel.muted ? "destructive" : "outline"}
               className="flex-1"
-              onClick={() => onMuteToggle(channel.id)}
+              disabled={isPending}
+              onClick={() => onMuteToggle(channel.id, !channel.muted)}
             >
               {channel.muted ? <VolumeOff className="size-4" /> : <Volume2 className="size-4" />}
               {channel.muted ? "Muted" : "Mute"}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Toggle mute for this channel.</TooltipContent>
+          <TooltipContent>Apply mute to all assigned sessions in this channel.</TooltipContent>
         </Tooltip>
         <Button
           variant={channel.solo ? "default" : "outline"}

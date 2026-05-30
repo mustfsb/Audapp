@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState, type ReactElement } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import {
   eqPresetValues,
@@ -57,6 +57,9 @@ export default function App() {
   const [activeSection, setActiveSection] = useState<SectionId>("dashboard");
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
   const [appVersion, setAppVersion] = useState("0.1.0");
+  const [channelErrors, setChannelErrors] = useState<Record<string, string>>({});
+  const channelPendingRef = useRef<Set<string>>(new Set());
+  const [channelPendingVersion, setChannelPendingVersion] = useState(0);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(mockEngineStatus);
   const [channels, setChannels] = useState<AudioChannel[]>(mockChannels);
   const [profiles, setProfiles] = useState<AudioProfile[]>(mockProfiles);
@@ -121,6 +124,101 @@ export default function App() {
     setChannels((current) => current.map((channel) => (channel.id === id ? updater(channel) : channel)));
   }
 
+  function setChannelPending(channelId: string, pending: boolean) {
+    if (pending) {
+      channelPendingRef.current.add(channelId);
+    } else {
+      channelPendingRef.current.delete(channelId);
+    }
+    setChannelPendingVersion((v) => v + 1);
+  }
+
+  const channelIsPending = useCallback(
+    (channelId: string) => channelPendingRef.current.has(channelId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [channelPendingVersion],
+  );
+
+  const handleMixerMuteToggle = useCallback(
+    async (channelId: string, newMuted: boolean) => {
+      updateChannel(channelId, (ch) => ({
+        ...ch,
+        muted: newMuted,
+        peak: newMuted ? 0 : ch.volume,
+      }));
+
+      const sessions = discoverySessions.filter(
+        (s) => channelAssignments.assignmentBySession(s)?.channelId === channelId,
+      );
+      if (sessions.length === 0) return;
+
+      setChannelPending(channelId, true);
+      const results = await Promise.allSettled(
+        sessions.map((s) => sessionControl.setMuted(s, newMuted)),
+      );
+      setChannelPending(channelId, false);
+
+      const errorMsgs: string[] = [];
+      for (const result of results) {
+        if (result.status === "rejected") {
+          errorMsgs.push("Command failed");
+        } else if (result.value && !result.value.ok) {
+          errorMsgs.push(result.value.message ?? "Session control failed");
+        }
+      }
+
+      if (errorMsgs.length > 0) {
+        setChannelErrors((prev) => ({ ...prev, [channelId]: errorMsgs.join("; ") }));
+      } else {
+        setChannelErrors((prev) => {
+          if (!(channelId in prev)) return prev;
+          const next = { ...prev };
+          delete next[channelId];
+          return next;
+        });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [discoverySessions, channelAssignments, sessionControl],
+  );
+
+  const handleMixerVolumeCommit = useCallback(
+    async (channelId: string, volumePercent: number) => {
+      const sessions = discoverySessions.filter(
+        (s) => channelAssignments.assignmentBySession(s)?.channelId === channelId,
+      );
+      if (sessions.length === 0) return;
+
+      setChannelPending(channelId, true);
+      const results = await Promise.allSettled(
+        sessions.map((s) => sessionControl.setVolume(s, volumePercent)),
+      );
+      setChannelPending(channelId, false);
+
+      const errorMsgs: string[] = [];
+      for (const result of results) {
+        if (result.status === "rejected") {
+          errorMsgs.push("Command failed");
+        } else if (result.value && !result.value.ok) {
+          errorMsgs.push(result.value.message ?? "Session control failed");
+        }
+      }
+
+      if (errorMsgs.length > 0) {
+        setChannelErrors((prev) => ({ ...prev, [channelId]: errorMsgs.join("; ") }));
+      } else {
+        setChannelErrors((prev) => {
+          if (!(channelId in prev)) return prev;
+          const next = { ...prev };
+          delete next[channelId];
+          return next;
+        });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [discoverySessions, channelAssignments, sessionControl],
+  );
+
   const assignmentCountsByChannel = useMemo(() => {
     const counts = Object.fromEntries(channels.map((channel) => [channel.id, 0])) as Record<
       string,
@@ -128,11 +226,10 @@ export default function App() {
     >;
 
     for (const session of discoverySessions) {
-      const channelId = channelAssignments.channelIdForSession(
-        session,
-        channels[0]?.id ?? "",
-      );
-      counts[channelId] = (counts[channelId] ?? 0) + 1;
+      const assignment = channelAssignments.assignmentBySession(session);
+      if (assignment && assignment.channelId in counts) {
+        counts[assignment.channelId] = (counts[assignment.channelId] ?? 0) + 1;
+      }
     }
 
     return counts;
@@ -193,19 +290,21 @@ export default function App() {
             meterHold: Math.min(100, value + 12),
           }))
         }
-        onMuteToggle={(id) =>
-          updateChannel(id, (channel) => ({
-            ...channel,
-            muted: !channel.muted,
-            peak: channel.muted ? channel.volume : 0,
-          }))
-        }
+        onVolumeCommit={(id, value) => {
+          updateChannel(id, (channel) => ({ ...channel, volume: value }));
+          void handleMixerVolumeCommit(id, value);
+        }}
+        onMuteToggle={(id, newMuted) => {
+          void handleMixerMuteToggle(id, newMuted);
+        }}
         onSoloToggle={(id) =>
           updateChannel(id, (channel) => ({ ...channel, solo: !channel.solo }))
         }
         onOutputChange={(id, outputDeviceId) =>
           updateChannel(id, (channel) => ({ ...channel, outputDeviceId }))
         }
+        channelErrors={channelErrors}
+        channelIsPending={channelIsPending}
       />
     ),
     apps: (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, RefreshCw, Volume2, VolumeX } from "lucide-react";
 
 import { SectionHeader } from "@/components/layout/section-header";
@@ -38,6 +38,8 @@ interface AppsViewProps {
   onRefresh: () => void;
 }
 
+const LIVE_VOLUME_THROTTLE_MS = 100;
+
 function SessionVolumeControl({
   session,
   disabled,
@@ -51,10 +53,36 @@ function SessionVolumeControl({
 }) {
   const discoveredVolume = sessionVolumePercent(session) ?? 0;
   const [draftVolume, setDraftVolume] = useState(discoveredVolume);
+  const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setDraftVolume(discoveredVolume);
   }, [discoveredVolume, session.id]);
+
+  useEffect(() => {
+    return () => {
+      if (liveTimerRef.current !== null) clearTimeout(liveTimerRef.current);
+    };
+  }, []);
+
+  function handleValueChange(values: number[]) {
+    const v = values[0] ?? draftVolume;
+    setDraftVolume(v);
+    if (liveTimerRef.current !== null) clearTimeout(liveTimerRef.current);
+    liveTimerRef.current = setTimeout(() => {
+      liveTimerRef.current = null;
+      onVolumeCommit(session, v);
+    }, LIVE_VOLUME_THROTTLE_MS);
+  }
+
+  function handleValueCommit(values: number[]) {
+    const v = values[0] ?? draftVolume;
+    if (liveTimerRef.current !== null) {
+      clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = null;
+    }
+    onVolumeCommit(session, v);
+  }
 
   return (
     <div className="space-y-2">
@@ -71,9 +99,9 @@ function SessionVolumeControl({
         min={0}
         max={100}
         step={1}
-        disabled={disabled || isPending}
-        onValueChange={(values) => setDraftVolume(values[0] ?? 0)}
-        onValueCommit={(values) => onVolumeCommit(session, values[0] ?? 0)}
+        disabled={disabled}
+        onValueChange={handleValueChange}
+        onValueCommit={handleValueCommit}
       />
     </div>
   );

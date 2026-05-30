@@ -10,9 +10,12 @@ interface MixerViewProps {
   assignmentCountsByChannel: Record<string, number>;
   outputDevices: AudioDevice[];
   onVolumeChange: (id: string, value: number) => void;
-  onMuteToggle: (id: string) => void;
+  onVolumeCommit: (id: string, value: number) => void;
+  onMuteToggle: (id: string, newMuted: boolean) => void;
   onSoloToggle: (id: string) => void;
   onOutputChange: (id: string, outputDeviceId: string) => void;
+  channelErrors: Record<string, string>;
+  channelIsPending: (id: string) => boolean;
 }
 
 export function MixerView(props: MixerViewProps) {
@@ -21,7 +24,7 @@ export function MixerView(props: MixerViewProps) {
       <SectionHeader
         eyebrow="Mixer"
         title="Channel strips"
-        description="Mock channel strips for local grouping only. Real routing is not active yet. Assigned app counts come from Audapp-local metadata."
+        description="Local group controls — mute and volume apply to all sessions currently assigned to each channel. This does not route audio yet."
         actions={
           <Button variant="outline">
             Create channel profile
@@ -30,24 +33,35 @@ export function MixerView(props: MixerViewProps) {
       />
 
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-        {props.channels.map((channel) => (
-          <div key={channel.id} className="space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <Badge variant="outline">
-                {props.assignmentCountsByChannel[channel.id] ?? 0} assigned apps
-              </Badge>
-              <span className="text-xs text-muted-foreground">Local grouping only</span>
+        {props.channels.map((channel) => {
+          const count = props.assignmentCountsByChannel[channel.id] ?? 0;
+          const sessionLabel =
+            count === 0
+              ? "No assigned sessions"
+              : count === 1
+                ? "1 active session"
+                : `${count} active sessions`;
+
+          return (
+            <div key={channel.id} className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <Badge variant="outline">{sessionLabel}</Badge>
+                <span className="text-xs text-muted-foreground">Local group controls</span>
+              </div>
+              <ChannelStrip
+                channel={channel}
+                outputDevices={props.outputDevices}
+                onVolumeChange={props.onVolumeChange}
+                onVolumeCommit={props.onVolumeCommit}
+                onMuteToggle={props.onMuteToggle}
+                onSoloToggle={props.onSoloToggle}
+                onOutputChange={props.onOutputChange}
+                error={props.channelErrors[channel.id] ?? null}
+                isPending={props.channelIsPending(channel.id)}
+              />
             </div>
-            <ChannelStrip
-            channel={channel}
-            outputDevices={props.outputDevices}
-            onVolumeChange={props.onVolumeChange}
-            onMuteToggle={props.onMuteToggle}
-            onSoloToggle={props.onSoloToggle}
-            onOutputChange={props.onOutputChange}
-          />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
