@@ -12,6 +12,19 @@ function Fail([string]$Message) {
     exit 1
 }
 
+function Get-VsInstallationPath {
+    param(
+        [string]$VsWherePath
+    )
+
+    $vs2022 = & $VsWherePath -latest -products * -version "[17.0,18.0)" -property installationPath
+    if ($vs2022) {
+        return $vs2022
+    }
+
+    return (& $VsWherePath -latest -products * -property installationPath)
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Join-Path $scriptRoot "project"
 $targetRoot = Join-Path $projectRoot "upstream-audiocodec"
@@ -19,9 +32,6 @@ $solutionPath = Join-Path $targetRoot "AudioCodec.sln"
 
 if ($SampleRoot) {
     & (Join-Path $scriptRoot "prepare.ps1") -SampleRoot $SampleRoot
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
 }
 
 if (-not (Test-Path -LiteralPath $solutionPath)) {
@@ -33,7 +43,7 @@ if (-not (Test-Path -LiteralPath $vswhere)) {
     Fail "vswhere.exe was not found. Visual Studio detection cannot continue."
 }
 
-$installationPath = & $vswhere -latest -products * -property installationPath
+$installationPath = Get-VsInstallationPath -VsWherePath $vswhere
 if (-not $installationPath) {
     Fail "Visual Studio installation was not found by vswhere."
 }

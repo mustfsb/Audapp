@@ -1,4 +1,5 @@
 project/upstream-audiocodec/
+project/import-report.txt
 project/build/
 project/out/
 project/*.binlog

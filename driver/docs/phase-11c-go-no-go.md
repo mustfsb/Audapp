@@ -43,25 +43,27 @@ Compile-only minimal "Audapp Input" virtual endpoint POC
 | 16 | VM or disposable test machine available | Unknown |
 | 17 | VM snapshot procedure documented | Documented, not verified in session |
 | 18 | Test-signing understood but not enabled | Documented and unchanged |
+| 19 | Local official `Windows-driver-samples` checkout exists | Complete - `C:\Users\mustafa\source\repos\Windows-driver-samples` |
+| 20 | Preferred VS 2022 toolchain available | Complete - Build Tools 2022 detected |
 
 ## Install gates
 
 | # | Item | Default |
 |---|------|---------|
-| 19 | Compile without install | Yes |
-| 20 | Local test-signed install | No unless explicitly approved |
-| 21 | Install only on VM/test machine | Required |
-| 22 | Uninstall steps documented before first install | Required |
-| 23 | Primary dev machine install | Forbidden for first POC |
+| 21 | Compile without install | Yes |
+| 22 | Local test-signed install | No unless explicitly approved |
+| 23 | Install only on VM/test machine | Required |
+| 24 | Uninstall steps documented before first install | Required |
+| 25 | Primary dev machine install | Forbidden for first POC |
 
 ## Product gates
 
 | # | Item | Status |
 |---|------|--------|
-| 24 | Audapp app behavior unchanged by 11C driver work | Complete in this change set |
-| 25 | Routing Lab / Voicemeeter path still works | Not exercised here because app code was untouched |
-| 26 | No APO / system-wide EQ scope creep | Complete |
-| 27 | User-mode loopback track still valued as fallback | Unchanged |
+| 26 | Audapp app behavior unchanged by 11C driver work | Complete in this change set |
+| 27 | Routing Lab / Voicemeeter path still works | Not exercised here because app code was untouched |
+| 28 | No APO / system-wide EQ scope creep | Complete |
+| 29 | User-mode loopback track still valued as fallback | Unchanged |
 
 ## Compile-only acceptance criteria
 
@@ -86,7 +88,7 @@ When proceeding to install later with separate approval:
 
 ```text
 Go / No-Go:
-- Go for more compile-only work once WDK tooling and a local official sample checkout are available.
+- Go for more compile-only work once WDK tooling is installed into the Windows Kits build tree.
 - No-Go for install work and No-Go for Phase 11D implementation until a real Phase 11C compile result exists.
 ```
 

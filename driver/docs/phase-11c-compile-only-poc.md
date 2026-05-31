@@ -76,13 +76,13 @@ driver/
 Preparation:
 
 ```powershell
-pwsh -File .\driver\scaffold\audapp-input\prepare.ps1 -SampleRoot C:\path\to\Windows-driver-samples
+powershell -ExecutionPolicy Bypass -File .\driver\scaffold\audapp-input\prepare.ps1 -SampleRoot C:\path\to\Windows-driver-samples
 ```
 
 Compile:
 
 ```powershell
-pwsh -File .\driver\scaffold\audapp-input\build.ps1 -SampleRoot C:\path\to\Windows-driver-samples
+powershell -ExecutionPolicy Bypass -File .\driver\scaffold\audapp-input\build.ps1 -SampleRoot C:\path\to\Windows-driver-samples
 ```
 
 The build script never installs or loads a driver. It only:
@@ -107,11 +107,18 @@ If the environment is incomplete, expected output is a clear blocker message and
 Environment facts observed in this session:
 
 - Visual Studio Community 2026 is installed at `C:\Program Files\Microsoft Visual Studio\18\Community`
-- `msbuild`, `cl`, and WDK build tooling are not available directly from the current shell
-- `C:\Program Files (x86)\Windows Kits\10\build` is missing
-- no local `Windows-driver-samples` checkout path was provided to import the ACX sample
+- Visual Studio 2022 Build Tools are also installed at `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools`
+- current WDK documentation does not validate Visual Studio 2026 for driver development, so the scaffold now prefers Visual Studio 2022 when available
+- `msbuild` and `cl` are not available directly from the current PowerShell session
+- a Visual Studio developer command environment is available through `VsDevCmd.bat` / `LaunchDevCmd.bat`
+- `pwsh` is not installed, so commands in this repo must run through Windows PowerShell
+- Windows SDK include/lib roots exist, but `C:\Program Files (x86)\Windows Kits\10\build` is missing
+- kernel-mode WDK headers such as `C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km` are missing
+- local official sample checkout now exists at `C:\Users\mustafa\source\repos\Windows-driver-samples`
+- expected ACX sample path exists at `C:\Users\mustafa\source\repos\Windows-driver-samples\audio\Acx\Samples\AudioCodec\Driver`
+- an official `winget` install attempt for `Microsoft.WindowsWDK.10.0.26100` downloaded the installer but failed before completing WDK setup with installer exit `2147944002`
 
-Because of those blockers, this phase currently stops at a scaffold-ready state. No compile success is claimed.
+`prepare.ps1` can run in the current environment. `build.ps1` remains blocked at WDK detection because the WDK build tree and kernel headers are not installed.
 
 ## What success means
 
@@ -141,12 +148,13 @@ Go conditions:
 
 - a local official `Windows-driver-samples` checkout is available
 - WDK build tools are installed and discoverable
+- kernel-mode WDK headers are installed
 - `build.ps1` reaches `msbuild` without environment errors
 - the isolated sample-based scaffold compiles without adding app dependencies
 
 No-Go conditions:
 
-- no sample checkout is available
 - WDK build tooling is still missing
+- the current session cannot complete WDK installation
 - compile requires broad undocumented vendoring beyond the current reviewed path
 - the work starts drifting into install, signing, or app integration scope
