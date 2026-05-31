@@ -11,6 +11,14 @@ const DEFAULT_DSP_CONFIG: DspRuntimeConfig = {
   highPassHz: 80,
   lowPassEnabled: false,
   lowPassHz: 18000,
+  eqEnabled: false,
+  eqBands: [
+    { id: "band_100hz",   frequencyHz: 100,   gainDb: 0, enabled: true },
+    { id: "band_250hz",   frequencyHz: 250,   gainDb: 0, enabled: true },
+    { id: "band_1000hz",  frequencyHz: 1000,  gainDb: 0, enabled: true },
+    { id: "band_4000hz",  frequencyHz: 4000,  gainDb: 0, enabled: true },
+    { id: "band_10000hz", frequencyHz: 10000, gainDb: 0, enabled: true },
+  ],
 };
 
 const THROTTLE_MS = 100;

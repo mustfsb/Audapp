@@ -484,6 +484,67 @@ export function EngineLabView({ outputDevices, inputDevices }: EngineLabViewProp
             </div>
           </div>
 
+          {/* EQ Bands */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">EQ Bands</label>
+              <Switch
+                size="sm"
+                checked={dsp.config.eqEnabled}
+                disabled={!dsp.config.enabled || dsp.isLoading}
+                onCheckedChange={(checked) => {
+                  void dsp.commitConfig({ ...dsp.config, eqEnabled: checked });
+                }}
+              />
+            </div>
+
+            <div className="grid grid-cols-5 gap-3">
+              {dsp.config.eqBands.map((band, idx) => {
+                const label =
+                  band.frequencyHz >= 1000
+                    ? `${band.frequencyHz / 1000} kHz`
+                    : `${band.frequencyHz} Hz`;
+                return (
+                  <div key={band.id} className="flex flex-col items-center gap-2">
+                    <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+                    <span className="text-[10px] tabular-nums text-muted-foreground">
+                      {band.gainDb > 0 ? "+" : ""}
+                      {band.gainDb.toFixed(1)}
+                    </span>
+                    <Slider
+                      min={-12}
+                      max={12}
+                      step={0.5}
+                      value={[band.gainDb]}
+                      disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
+                      orientation="vertical"
+                      className="h-20"
+                      onValueChange={([v]) => {
+                        if (v === undefined) return;
+                        const newBands = dsp.config.eqBands.map((b, i) =>
+                          i === idx ? { ...b, gainDb: v } : b,
+                        );
+                        dsp.setConfig({ ...dsp.config, eqBands: newBands });
+                      }}
+                      onValueCommit={([v]) => {
+                        if (v === undefined) return;
+                        const newBands = dsp.config.eqBands.map((b, i) =>
+                          i === idx ? { ...b, gainDb: v } : b,
+                        );
+                        void dsp.commitConfig({ ...dsp.config, eqBands: newBands });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="rounded-md border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
+              EQ bands are test-only and apply only to Audio Engine Lab streams. They do not process
+              app audio, routed channels, microphone enhancement, or system output yet.
+            </p>
+          </div>
+
           <div className="flex items-center gap-3">
             <Button
               variant="outline"

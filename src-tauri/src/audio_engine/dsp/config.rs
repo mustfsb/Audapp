@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::OnceLock;
 
+use super::eq::{clamp_eq_gain_db, NUM_EQ_BANDS};
 use super::gain::clamp_gain_db;
-use super::types::{DspRuntimeConfig, DspRuntimeStatus};
+use super::types::{DspRuntimeConfig, DspRuntimeStatus, EqBandConfig};
 
 const HP_HZ_MIN: f32 = 20.0;
 const HP_HZ_MAX: f32 = 300.0;
@@ -12,19 +13,23 @@ const LP_HZ_MAX: f32 = 20000.0;
 pub struct DspConfigShared {
     // User-writable config
     pub enabled: AtomicBool,
-    pub output_gain_db: AtomicU32,   // f32 as bits
+    pub output_gain_db: AtomicU32,  // f32 as bits
     pub input_gain_db: AtomicU32,
     pub high_pass_enabled: AtomicBool,
     pub high_pass_hz: AtomicU32,
     pub low_pass_enabled: AtomicBool,
     pub low_pass_hz: AtomicU32,
-    pub version: AtomicU32,          // bumped on every write; worker reads this for cache-invalidation
+    // EQ
+    pub eq_enabled: AtomicBool,
+    pub eq_band_gains: [AtomicU32; NUM_EQ_BANDS],    // f32 bits, -12..+12 dB
+    pub eq_band_enabled: [AtomicBool; NUM_EQ_BANDS],
+    pub version: AtomicU32, // bumped on every write; worker reads this for cache-invalidation
 
     // Engine-reported status (written by pipeline, read by status command)
     pub active_in_engine: AtomicBool,
     pub supported: AtomicBool,
-    pub unsupported_reason_idx: AtomicU32,  // 0=none, 1=not float32
-    pub sample_format_tag: AtomicU32,       // 0=unknown, 1=f32, 2=i16, 3=other
+    pub unsupported_reason_idx: AtomicU32, // 0=none, 1=not float32
+    pub sample_format_tag: AtomicU32,      // 0=unknown, 1=f32, 2=i16, 3=other
 }
 
 static DSP_CONFIG: OnceLock<DspConfigShared> = OnceLock::new();
@@ -40,6 +45,21 @@ pub fn global() -> &'static DspConfigShared {
             high_pass_hz: AtomicU32::new(d.high_pass_hz.to_bits()),
             low_pass_enabled: AtomicBool::new(d.low_pass_enabled),
             low_pass_hz: AtomicU32::new(d.low_pass_hz.to_bits()),
+            eq_enabled: AtomicBool::new(d.eq_enabled),
+            eq_band_gains: [
+                AtomicU32::new(0_f32.to_bits()),
+                AtomicU32::new(0_f32.to_bits()),
+                AtomicU32::new(0_f32.to_bits()),
+                AtomicU32::new(0_f32.to_bits()),
+                AtomicU32::new(0_f32.to_bits()),
+            ],
+            eq_band_enabled: [
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+                AtomicBool::new(true),
+            ],
             version: AtomicU32::new(1),
             active_in_engine: AtomicBool::new(false),
             supported: AtomicBool::new(true),
@@ -50,6 +70,16 @@ pub fn global() -> &'static DspConfigShared {
 }
 
 fn clamp_config(c: DspRuntimeConfig) -> DspRuntimeConfig {
+    let eq_bands = c
+        .eq_bands
+        .into_iter()
+        .map(|b| EqBandConfig {
+            id: b.id,
+            frequency_hz: b.frequency_hz,
+            gain_db: clamp_eq_gain_db(b.gain_db),
+            enabled: b.enabled,
+        })
+        .collect();
     DspRuntimeConfig {
         enabled: c.enabled,
         output_gain_db: clamp_gain_db(c.output_gain_db),
@@ -58,11 +88,22 @@ fn clamp_config(c: DspRuntimeConfig) -> DspRuntimeConfig {
         high_pass_hz: c.high_pass_hz.clamp(HP_HZ_MIN, HP_HZ_MAX),
         low_pass_enabled: c.low_pass_enabled,
         low_pass_hz: c.low_pass_hz.clamp(LP_HZ_MIN, LP_HZ_MAX),
+        eq_enabled: c.eq_enabled,
+        eq_bands,
     }
 }
 
 pub fn get_config() -> DspRuntimeConfig {
+    use super::eq::EQ_FREQUENCIES;
     let g = global();
+    let eq_bands = (0..NUM_EQ_BANDS)
+        .map(|i| EqBandConfig {
+            id: format!("band_{}hz", EQ_FREQUENCIES[i] as u32),
+            frequency_hz: EQ_FREQUENCIES[i],
+            gain_db: f32::from_bits(g.eq_band_gains[i].load(Ordering::Relaxed)),
+            enabled: g.eq_band_enabled[i].load(Ordering::Relaxed),
+        })
+        .collect();
     DspRuntimeConfig {
         enabled: g.enabled.load(Ordering::Relaxed),
         output_gain_db: f32::from_bits(g.output_gain_db.load(Ordering::Relaxed)),
@@ -71,6 +112,8 @@ pub fn get_config() -> DspRuntimeConfig {
         high_pass_hz: f32::from_bits(g.high_pass_hz.load(Ordering::Relaxed)),
         low_pass_enabled: g.low_pass_enabled.load(Ordering::Relaxed),
         low_pass_hz: f32::from_bits(g.low_pass_hz.load(Ordering::Relaxed)),
+        eq_enabled: g.eq_enabled.load(Ordering::Relaxed),
+        eq_bands,
     }
 }
 
@@ -84,6 +127,11 @@ pub fn set_config(config: DspRuntimeConfig) -> DspRuntimeStatus {
     g.high_pass_hz.store(c.high_pass_hz.to_bits(), Ordering::Relaxed);
     g.low_pass_enabled.store(c.low_pass_enabled, Ordering::Relaxed);
     g.low_pass_hz.store(c.low_pass_hz.to_bits(), Ordering::Relaxed);
+    g.eq_enabled.store(c.eq_enabled, Ordering::Relaxed);
+    for (i, band) in c.eq_bands.iter().enumerate().take(NUM_EQ_BANDS) {
+        g.eq_band_gains[i].store(band.gain_db.to_bits(), Ordering::Relaxed);
+        g.eq_band_enabled[i].store(band.enabled, Ordering::Relaxed);
+    }
     g.version.fetch_add(1, Ordering::Relaxed);
     get_status()
 }

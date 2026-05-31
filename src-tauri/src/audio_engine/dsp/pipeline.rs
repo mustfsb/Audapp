@@ -2,16 +2,17 @@ use std::sync::atomic::Ordering;
 
 use super::biquad::{BiquadCoeffs, BiquadState};
 use super::config::DspConfigShared;
+use super::eq::{peaking_eq_coeffs, EQ_FREQUENCIES, EQ_Q, NUM_EQ_BANDS};
 use super::filters::{default_q, highpass_coeffs, lowpass_coeffs};
 use super::gain::db_to_linear;
 
 /// Snapshot of config values cached for a buffer cycle (read once per cycle, never per sample).
-/// Only the fields actually used in per-sample processing are kept here.
 struct DspSnapshot {
     enabled: bool,
     supported: bool,
     output_gain: f32,
     input_gain: f32,
+    eq_enabled: bool,
 }
 
 /// Per-engine-run DSP pipeline.
@@ -27,11 +28,15 @@ pub struct DspPipeline {
     out_lp: BiquadState,
     out_hp_coeffs: BiquadCoeffs,
     out_lp_coeffs: BiquadCoeffs,
+    out_eq_states: [BiquadState; NUM_EQ_BANDS],
+    out_eq_coeffs: [BiquadCoeffs; NUM_EQ_BANDS],
     // Per-channel input chain (capture is multichannel interleaved)
     in_hp_states: Vec<BiquadState>,
     in_lp_states: Vec<BiquadState>,
     in_hp_coeffs: BiquadCoeffs,
     in_lp_coeffs: BiquadCoeffs,
+    in_eq_states: Vec<[BiquadState; NUM_EQ_BANDS]>,
+    in_eq_coeffs: [BiquadCoeffs; NUM_EQ_BANDS],
 }
 
 impl DspPipeline {
@@ -46,15 +51,20 @@ impl DspPipeline {
                 supported: false,
                 output_gain: 1.0,
                 input_gain: 1.0,
+                eq_enabled: false,
             },
             out_hp: BiquadState::default(),
             out_lp: BiquadState::default(),
             out_hp_coeffs: BiquadCoeffs::IDENTITY,
             out_lp_coeffs: BiquadCoeffs::IDENTITY,
+            out_eq_states: [BiquadState::default(); NUM_EQ_BANDS],
+            out_eq_coeffs: [BiquadCoeffs::IDENTITY; NUM_EQ_BANDS],
             in_hp_states: Vec::new(),
             in_lp_states: Vec::new(),
             in_hp_coeffs: BiquadCoeffs::IDENTITY,
             in_lp_coeffs: BiquadCoeffs::IDENTITY,
+            in_eq_states: Vec::new(),
+            in_eq_coeffs: [BiquadCoeffs::IDENTITY; NUM_EQ_BANDS],
         }
     }
 
@@ -74,11 +84,13 @@ impl DspPipeline {
         // Preallocate per-channel states — no further allocation in process_*
         self.in_hp_states = vec![BiquadState::default(); channels.max(1)];
         self.in_lp_states = vec![BiquadState::default(); channels.max(1)];
+        self.in_eq_states = vec![[BiquadState::default(); NUM_EQ_BANDS]; channels.max(1)];
 
         let fmt_tag: u32 = if is_float { 1 } else if bits_per_sample == 16 { 2 } else { 3 };
         shared.sample_format_tag.store(fmt_tag, Ordering::Relaxed);
         shared.supported.store(is_float, Ordering::Relaxed);
-        shared.unsupported_reason_idx
+        shared
+            .unsupported_reason_idx
             .store(if is_float { 0 } else { 1 }, Ordering::Relaxed);
         shared.active_in_engine.store(true, Ordering::Relaxed);
 
@@ -112,18 +124,20 @@ impl DspPipeline {
         let hp_hz = f32::from_bits(shared.high_pass_hz.load(Ordering::Relaxed));
         let lp_enabled = shared.low_pass_enabled.load(Ordering::Relaxed);
         let lp_hz = f32::from_bits(shared.low_pass_hz.load(Ordering::Relaxed));
+        let eq_enabled = shared.eq_enabled.load(Ordering::Relaxed);
 
         self.snapshot = DspSnapshot {
             enabled,
             supported,
             output_gain: db_to_linear(out_gain_db),
             input_gain: db_to_linear(in_gain_db),
+            eq_enabled,
         };
 
         let q = default_q();
         let fs = self.sample_rate;
 
-        // Recompute coefficients once per config change (transcendental math only here, not per sample)
+        // Recompute HP/LP coefficients once per config change
         self.out_hp_coeffs = if hp_enabled {
             highpass_coeffs(hp_hz, fs, q)
         } else {
@@ -134,9 +148,20 @@ impl DspPipeline {
         } else {
             BiquadCoeffs::IDENTITY
         };
-        // Input chain uses the same HP/LP settings
         self.in_hp_coeffs = self.out_hp_coeffs;
         self.in_lp_coeffs = self.out_lp_coeffs;
+
+        // Recompute EQ band coefficients once per config change
+        for i in 0..NUM_EQ_BANDS {
+            let gain_db = f32::from_bits(shared.eq_band_gains[i].load(Ordering::Relaxed));
+            let band_enabled = shared.eq_band_enabled[i].load(Ordering::Relaxed);
+            self.out_eq_coeffs[i] = if band_enabled && gain_db.abs() > 0.01 {
+                peaking_eq_coeffs(EQ_FREQUENCIES[i], fs, gain_db, EQ_Q)
+            } else {
+                BiquadCoeffs::IDENTITY
+            };
+        }
+        self.in_eq_coeffs = self.out_eq_coeffs;
         // Note: filter states are NOT reset here — avoid a hard click on parameter change.
         // The filter settles naturally into the new coefficients.
     }
@@ -151,7 +176,13 @@ impl DspPipeline {
         let y = x * self.snapshot.output_gain;
         let hp = self.out_hp_coeffs;
         let lp = self.out_lp_coeffs;
-        let y = self.out_hp.process(y, &hp);
+        let mut y = self.out_hp.process(y, &hp);
+        if self.snapshot.eq_enabled {
+            for i in 0..NUM_EQ_BANDS {
+                let c = self.out_eq_coeffs[i];
+                y = self.out_eq_states[i].process(y, &c);
+            }
+        }
         self.out_lp.process(y, &lp)
     }
 
@@ -170,7 +201,13 @@ impl DspPipeline {
         let y = x * self.snapshot.input_gain;
         let hp = self.in_hp_coeffs;
         let lp = self.in_lp_coeffs;
-        let y = self.in_hp_states[ci].process(y, &hp);
+        let mut y = self.in_hp_states[ci].process(y, &hp);
+        if self.snapshot.eq_enabled {
+            for i in 0..NUM_EQ_BANDS {
+                let c = self.in_eq_coeffs[i];
+                y = self.in_eq_states[ci][i].process(y, &c);
+            }
+        }
         self.in_lp_states[ci].process(y, &lp)
     }
 }

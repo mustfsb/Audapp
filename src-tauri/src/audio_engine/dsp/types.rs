@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+use super::eq::{EQ_FREQUENCIES, NUM_EQ_BANDS};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EqBandConfig {
+    pub id: String,
+    pub frequency_hz: f32,
+    pub gain_db: f32,
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DspRuntimeConfig {
@@ -10,10 +21,20 @@ pub struct DspRuntimeConfig {
     pub high_pass_hz: f32,
     pub low_pass_enabled: bool,
     pub low_pass_hz: f32,
+    pub eq_enabled: bool,
+    pub eq_bands: Vec<EqBandConfig>,
 }
 
 impl Default for DspRuntimeConfig {
     fn default() -> Self {
+        let eq_bands = (0..NUM_EQ_BANDS)
+            .map(|i| EqBandConfig {
+                id: format!("band_{}hz", EQ_FREQUENCIES[i] as u32),
+                frequency_hz: EQ_FREQUENCIES[i],
+                gain_db: 0.0,
+                enabled: true,
+            })
+            .collect();
         Self {
             enabled: false,
             output_gain_db: 0.0,
@@ -22,6 +43,8 @@ impl Default for DspRuntimeConfig {
             high_pass_hz: 80.0,
             low_pass_enabled: false,
             low_pass_hz: 18000.0,
+            eq_enabled: false,
+            eq_bands,
         }
     }
 }

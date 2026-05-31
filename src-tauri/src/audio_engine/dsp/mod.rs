@@ -1,5 +1,6 @@
 pub mod biquad;
 pub mod config;
+pub mod eq;
 pub mod filters;
 pub mod gain;
 pub mod pipeline;

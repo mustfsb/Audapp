@@ -43,6 +43,13 @@ export type DeviceFormatInfo = {
   isFloat: boolean;
 };
 
+export type EqBandConfig = {
+  id: string;
+  frequencyHz: number;
+  gainDb: number;
+  enabled: boolean;
+};
+
 export type DspRuntimeConfig = {
   enabled: boolean;
   outputGainDb: number;
@@ -51,6 +58,8 @@ export type DspRuntimeConfig = {
   highPassHz: number;
   lowPassEnabled: boolean;
   lowPassHz: number;
+  eqEnabled: boolean;
+  eqBands: EqBandConfig[];
 };
 
 export type DspRuntimeStatus = {
