@@ -1,9 +1,12 @@
+use tauri::Manager;
+
 use crate::audio_engine::{
-    dsp_get_config, dsp_get_status, dsp_reset_config, dsp_set_config,
+    dsp_get_config, dsp_get_status, dsp_reset_config, dsp_set_config, dsp_set_eq_preset,
     engine_start, engine_status, engine_stop, probe_device_formats,
     AudioEngineRuntimeStatus, DeviceFormatInfo, DspRuntimeConfig, DspRuntimeStatus,
     StartAudioEngineTestInput,
 };
+use crate::audio_engine::dsp::persistence as dsp_persistence;
 
 #[tauri::command]
 pub fn get_audio_engine_runtime_status() -> AudioEngineRuntimeStatus {
@@ -33,16 +36,34 @@ pub fn get_dsp_config() -> DspRuntimeConfig {
 }
 
 #[tauri::command]
-pub fn set_dsp_config(config: DspRuntimeConfig) -> DspRuntimeStatus {
-    dsp_set_config(config)
+pub fn set_dsp_config(app: tauri::AppHandle, config: DspRuntimeConfig) -> DspRuntimeStatus {
+    let status = dsp_set_config(config.clone());
+    if let Ok(data_dir) = app.path().app_local_data_dir() {
+        let _ = dsp_persistence::save_dsp_config(&data_dir, &config);
+    }
+    status
 }
 
 #[tauri::command]
-pub fn reset_dsp_config() -> DspRuntimeConfig {
-    dsp_reset_config()
+pub fn reset_dsp_config(app: tauri::AppHandle) -> DspRuntimeConfig {
+    let config = dsp_reset_config();
+    if let Ok(data_dir) = app.path().app_local_data_dir() {
+        let _ = dsp_persistence::reset_persisted_dsp_config(&data_dir);
+    }
+    config
 }
 
 #[tauri::command]
 pub fn get_dsp_status() -> DspRuntimeStatus {
     dsp_get_status()
+}
+
+#[tauri::command]
+pub fn set_dsp_eq_preset(app: tauri::AppHandle, preset: String) -> DspRuntimeStatus {
+    let status = dsp_set_eq_preset(&preset);
+    if let Ok(data_dir) = app.path().app_local_data_dir() {
+        let current = dsp_get_config();
+        let _ = dsp_persistence::save_dsp_config(&data_dir, &current);
+    }
+    status
 }

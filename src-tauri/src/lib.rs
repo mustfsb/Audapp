@@ -3,10 +3,18 @@ mod audio_engine;
 mod audio_engine_commands;
 mod commands;
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            if let Ok(data_dir) = app.path().app_local_data_dir() {
+                audio_engine::dsp_load_and_apply_persisted(&data_dir);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_version,
             commands::get_audio_engine_status,
@@ -24,6 +32,7 @@ pub fn run() {
             audio_engine_commands::set_dsp_config,
             audio_engine_commands::reset_dsp_config,
             audio_engine_commands::get_dsp_status,
+            audio_engine_commands::set_dsp_eq_preset,
         ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
