@@ -1,0 +1,33 @@
+{
+  "upstreamRepository": "https://github.com/microsoft/Windows-driver-samples",
+  "acxSamplePath": "audio/Acx/Samples/AudioCodec/Driver",
+  "sysvadReferencePath": "audio/sysvad",
+  "requiredAcxFiles": [
+    "AudioCodec.inf",
+    "AudioCodec.sln",
+    "AudioCodec.vcxproj",
+    "AudioCodec.vcxproj.Filters",
+    "Device.cpp",
+    "Driver.cpp",
+    "DriverSettings.h",
+    "ReadMe.txt",
+    "Resources.rc"
+  ],
+  "sysvadReferenceFiles": [
+    "sysvad.sln",
+    "adapter.cpp",
+    "common.cpp",
+    "common.h",
+    "README.md"
+  ],
+  "sysvadReferenceDirectories": [
+    "EndpointsCommon",
+    "Package"
+  ],
+  "targetEndpointName": "Audapp Input",
+  "notes": [
+    "ACX remains the implementation target.",
+    "SYSVAD remains a topology and packaging reference only.",
+    "Import through prepare.ps1 instead of committing a broad sample dump."
+  ]
+}

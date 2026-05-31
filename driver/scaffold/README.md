@@ -1,19 +1,22 @@
-# Driver scaffold (placeholder)
+# Driver scaffold
 
-**Phase 11B:** This directory is intentionally empty of buildable driver code.
+This directory holds isolated driver-side scaffolding only. Nothing here is wired into the root Audapp application build.
 
-Future phases (11C onward) may add:
+## Contents
 
-- WDF/ACX driver project files (`.vcxproj`, INF, sources)
-- Isolated build scripts that do **not** invoke from the root `cargo` / `npm` workflows
-- Sample-derived structure referenced from SYSVAD virtual-audio patterns
+- `audapp-input/` - compile-only scaffold for the future `Audapp Input` virtual render endpoint
 
 ## Build isolation
 
-- Do **not** add this tree as a Cargo workspace member.
-- Do **not** reference `driver/` from `src-tauri` or Tauri bundle config.
-- Driver builds should run only from explicit, documented commands on a WDK-equipped machine (Phase 11C+).
+- Do not add this tree to Cargo, npm, or Tauri workflows.
+- Do not treat these files as a shipping driver package.
+- Run all driver preparation and build steps only through explicit scripts under the scaffold.
 
 ## Phase 11C expectation
 
-First compile-only milestone: minimal **Audapp Input** virtual render endpoint that appears in Windows sound settings and accepts audio (initially render-to-null inside the driver). Install and test-signing remain **opt-in** and VM-only unless explicitly approved.
+The first milestone remains compile-only:
+
+- target one endpoint named `Audapp Input`
+- prefer ACX project structure
+- use SYSVAD only as a reference pattern
+- no install, no load, no test-signing, no admin-only system changes

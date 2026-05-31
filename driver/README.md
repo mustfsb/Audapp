@@ -1,67 +1,75 @@
-# Audapp — Virtual Audio Driver (Research & Scaffold)
+# Audapp - Virtual Audio Driver
 
-**Phase:** 11B — documentation and isolated scaffold only  
-**Status:** Not compiled, not installed, not loaded
+**Phase:** 11C compile-only scaffold spike  
+**Status:** Scaffolded, not installed, not loaded
 
-This folder holds research, architecture notes, and a placeholder scaffold for Audapp’s **future** kernel-mode virtual audio driver. It is deliberately isolated from the shipping Audapp application.
+This folder holds the isolated driver-side work for Audapp's future kernel-mode virtual audio endpoint. It remains intentionally decoupled from the shipping Tauri/Rust application.
 
 ## What this folder is
 
-- Research and planning for an **Audapp-owned virtual audio endpoint** (e.g. `Audapp Input`) that Windows apps can select as their output device.
-- Architecture notes for WDK, ACX, SYSVAD patterns, driver↔app transport, signing, and safety.
-- A non-built `scaffold/` placeholder for future driver source layout (Phase 11C+).
+- Research and implementation notes for a future Audapp-owned endpoint named `Audapp Input`.
+- Safety, build, and provenance docs for a compile-only WDK/ACX spike.
+- A scaffold under `scaffold/audapp-input/` with scripts that can import an official Microsoft sample checkout and attempt a local compile without installing anything.
 
 ## What this folder is not
 
-- **No driver is compiled or installed in Phase 11B.**
-- No WDK build steps are wired into Cargo or Tauri.
-- No `.sys` binaries, installers, or test-signing setup.
+- Not part of Cargo, npm, or Tauri build flows.
+- Not an installer, signer, or driver loading path.
+- Not proof that Audapp has a working virtual endpoint today.
 
 ## Relationship to the working app
 
-| Area | Phase 11B impact |
-|------|------------------|
-| `src/`, `src-tauri/` | **Unchanged** — Routing Lab, Engine Lab, DSP/EQ, Mixer, discovery |
-| Cargo / Tauri build | **Does not include** `driver/` (not a workspace member, no package scripts) |
-| Current user path | **Unchanged** — manual virtual cable / Voicemeeter → Routing Lab capture → DSP/EQ → physical output |
+| Area | Impact |
+|------|--------|
+| `src/`, `src-tauri/` | Unchanged |
+| Cargo / Tauri build | Does not include `driver/` |
+| Current user path | Still uses virtual cable / Voicemeeter into Routing Lab |
 
-**Long-term target:**
-
-```text
-App audio → Audapp-owned virtual endpoint → Audapp routing/DSP → selected physical output
-```
-
-**Current working path (unchanged):**
+Long-term target:
 
 ```text
-App audio → VB-CABLE / Voicemeeter → Routing Lab capture → Audapp DSP/EQ → physical output
+App audio -> Audapp Input -> Audapp routing/DSP -> selected physical output
 ```
 
-A future driver only replaces the **capture source**; the existing duplex worker, ring buffer, DSP pipeline, and render path are intended to be reused (see Phase 11A plan).
+Current working path:
+
+```text
+App audio -> VB-CABLE / Voicemeeter -> Routing Lab capture -> Audapp DSP/EQ -> physical output
+```
+
+The driver effort only aims to replace the capture source over time. Existing routing, DSP, render, and UI behavior stay out of scope here.
 
 ## Documentation index
 
 | Document | Purpose |
 |----------|---------|
-| [docs/wdk-prerequisites.md](docs/wdk-prerequisites.md) | WDK, VS, SDK, VM, test-signing (future only) |
-| [docs/sysvad-vs-acx-decision.md](docs/sysvad-vs-acx-decision.md) | ACX vs SYSVAD / PortCls for Audapp |
-| [docs/driver-app-transport.md](docs/driver-app-transport.md) | Driver ↔ user-mode communication design |
-| [docs/signing-and-distribution.md](docs/signing-and-distribution.md) | Test-sign vs EV + attestation (deferred cost) |
-| [docs/safety-and-recovery.md](docs/safety-and-recovery.md) | BSOD, rollback, VM testing |
-| [docs/phase-11c-go-no-go.md](docs/phase-11c-go-no-go.md) | Checklist before compile-only POC |
+| [docs/wdk-prerequisites.md](docs/wdk-prerequisites.md) | WDK, VS, SDK, VM, and signing prerequisites |
+| [docs/sysvad-vs-acx-decision.md](docs/sysvad-vs-acx-decision.md) | ACX target and SYSVAD reference rationale |
+| [docs/driver-app-transport.md](docs/driver-app-transport.md) | Driver-to-user-mode transport design |
+| [docs/signing-and-distribution.md](docs/signing-and-distribution.md) | Signing path and distribution constraints |
+| [docs/safety-and-recovery.md](docs/safety-and-recovery.md) | BSOD, rollback, and VM guidance |
+| [docs/phase-11c-go-no-go.md](docs/phase-11c-go-no-go.md) | Phase gate checklist |
+| [docs/phase-11c-compile-only-poc.md](docs/phase-11c-compile-only-poc.md) | Phase 11C execution record |
+| [docs/phase-11d-transport-preview.md](docs/phase-11d-transport-preview.md) | Phase 11D boundary preview |
 
 ## Scaffold
 
-See [scaffold/README.md](scaffold/README.md). Placeholder only — no source to build.
+See [scaffold/README.md](scaffold/README.md) and [scaffold/audapp-input/README.md](scaffold/audapp-input/README.md).
+
+The scaffold is intentionally conservative:
+
+- It prefers official Microsoft sample inputs over a large vendored sample dump.
+- It only supports compile-only attempts.
+- It fails fast when WDK, MSBuild, or a local sample checkout are missing.
 
 ## Source of truth
 
-Architecture decisions are defined in:
+Architecture decisions begin with:
 
 `docs/superpowers/specs/2026-05-30-audapp-phase-11a-virtual-audio-device-architecture-plan.md`
 
 ## Warning
 
 ```text
-Do not install or test-sign any driver from this folder. Phase 11B is documentation/scaffold only.
+Do not install, load, or test-sign any driver from this folder as part of Phase 11C.
 ```
