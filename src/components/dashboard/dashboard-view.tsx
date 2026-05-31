@@ -1,17 +1,15 @@
-import { Activity, AlertTriangle, Mic2, MonitorSpeaker, RefreshCw, Sparkles, Waves } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Mic2, MonitorSpeaker, RefreshCw } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/section-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   discoveryStatusLabel,
   formatDiscoveryRefreshTime,
   sessionDisplayLabel,
-  sessionProcessLabel,
   sessionVolumePercent,
 } from "@/lib/discovery-display";
+import { useAudioEngine } from "@/lib/use-audio-engine";
+import { useAudioDsp } from "@/lib/use-audio-dsp";
 import type { AudioDiscoveryDevice, AudioDiscoverySession, AudioDiscoveryStatus } from "@/types/discovery";
 import type { AudioProfile, EngineStatus } from "@/types/audio";
 
@@ -27,225 +25,213 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({
-  engineStatus,
   discoveryStatus,
   outputDevice,
   inputDevice,
   sessions,
-  profiles,
   isDiscoveryLoading,
   onRefreshDiscovery,
 }: DashboardViewProps) {
-  const activeProfile = profiles.find((profile) => profile.active);
+  const { status: engineRuntime } = useAudioEngine();
+  const dsp = useAudioDsp();
+
+  const isEngineRunning = engineRuntime.state === "running";
+  const isDspActive = dsp.status?.enabled && dsp.status.activeInEngine;
+  const warnings = discoveryStatus.warnings;
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="System overview"
-        title="Desktop routing foundation"
-        description="Monitor Windows audio discovery, device focus, and engine posture. Session volume/mute control is available from the Apps page. Routing and DSP remain out of scope."
-        actions={
-          <Button variant="outline" size="sm" onClick={onRefreshDiscovery} disabled={isDiscoveryLoading}>
-            <RefreshCw className={`size-4 ${isDiscoveryLoading ? "animate-spin" : ""}`} />
-            Refresh discovery
-          </Button>
-        }
-      />
+    <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Overview</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            System status at a glance.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onRefreshDiscovery}
+          disabled={isDiscoveryLoading}
+        >
+          <RefreshCw className={`size-3.5 ${isDiscoveryLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
 
-      <div className="grid gap-4 xl:grid-cols-4">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Windows audio discovery</CardTitle>
-            <CardDescription>Live device and session counts from Core Audio.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="gap-1">
-                <Activity className="size-3.5" />
-                {discoveryStatusLabel(discoveryStatus)}
-              </Badge>
-              <Badge variant="outline">{discoveryStatus.deviceCount} devices</Badge>
-              <Badge variant="outline">{discoveryStatus.sessionCount} sessions</Badge>
-              <Badge variant="secondary">{activeProfile?.name ?? "No profile"} active</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Last refresh: {formatDiscoveryRefreshTime(discoveryStatus.refreshedAt)}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-md bg-muted/30 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Engine CPU (mock)</span>
-                  <span className="text-sm font-medium">{engineStatus.cpuLoad}%</span>
-                </div>
-                <Progress value={engineStatus.cpuLoad} />
-              </div>
-              <div className="rounded-md bg-muted/30 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Engine audio (mock)</span>
-                  <span className="text-sm font-medium">{engineStatus.audioLoad}%</span>
-                </div>
-                <Progress value={engineStatus.audioLoad} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <DeviceCard
-          icon={MonitorSpeaker}
-          title="Default output"
-          name={outputDevice?.name ?? "Unavailable"}
-          detail={outputDevice ? `State: ${outputDevice.state}` : "No default output detected"}
+      {/* Status rows */}
+      <div className="rounded-md border border-border divide-y divide-border">
+        <StatusRow
+          label="Discovery"
+          value={discoveryStatusLabel(discoveryStatus)}
+          sub={formatDiscoveryRefreshTime(discoveryStatus.refreshedAt)}
+          active={discoveryStatus.deviceCount > 0}
         />
-        <DeviceCard
-          icon={Mic2}
-          title="Default input"
-          name={inputDevice?.name ?? "Unavailable"}
-          detail={inputDevice ? `State: ${inputDevice.state}` : "No default input detected"}
+        <StatusRow
+          label="Devices"
+          value={`${discoveryStatus.deviceCount} endpoint${discoveryStatus.deviceCount !== 1 ? "s" : ""}`}
+          sub={
+            outputDevice
+              ? `Output: ${outputDevice.name}`
+              : inputDevice
+                ? `Input: ${inputDevice.name}`
+                : "No default endpoint detected"
+          }
+          active={discoveryStatus.deviceCount > 0}
+        />
+        <StatusRow
+          label="Active sessions"
+          value={`${discoveryStatus.sessionCount} session${discoveryStatus.sessionCount !== 1 ? "s" : ""}`}
+          sub="From Apps page — volume and mute are real"
+          active={discoveryStatus.sessionCount > 0}
+        />
+        <StatusRow
+          label="Mixer"
+          value="Local group controls"
+          sub="Applies volume/mute to assigned sessions — not routed"
+          active={false}
+          neutral
+        />
+        <StatusRow
+          label="Audio Engine Lab"
+          value={isEngineRunning ? `Running · ${engineRuntime.mode?.replace(/_/g, " ") ?? ""}` : "Stopped"}
+          sub={
+            isEngineRunning && engineRuntime.sampleRate
+              ? `${engineRuntime.sampleRate / 1000} kHz · ${engineRuntime.channels}ch`
+              : "Test-only WASAPI streams"
+          }
+          active={isEngineRunning}
+        />
+        <StatusRow
+          label="DSP / EQ"
+          value={
+            isDspActive
+              ? "Active"
+              : dsp.config.enabled
+                ? "Enabled (engine stopped)"
+                : "Disabled"
+          }
+          sub="Test-only · Engine Lab streams only"
+          active={!!isDspActive}
+          neutral={!isDspActive}
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Warnings and status area</CardTitle>
-            <CardDescription>Discovery warnings plus mock engine notices.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {[...discoveryStatus.warnings, ...engineStatus.warnings].map((warning) => (
-              <div
-                key={warning}
-                className="flex items-start gap-3 rounded-md bg-amber-500/10 px-3 py-3"
-              >
-                <AlertTriangle className="mt-0.5 size-4 text-amber-500" />
-                <p className="text-sm text-foreground">{warning}</p>
-              </div>
-            ))}
-            {discoveryStatus.warnings.length === 0 && engineStatus.warnings.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No warnings reported.</p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Latency mode card</CardTitle>
-            <CardDescription>Profile emphasis remains mock/config-only.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md bg-muted/30 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Mode</span>
-                <Badge>{engineStatus.latencyMode}</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Session control is available from the Apps page. Channel assignment is Audapp-local metadata only and does not route audio.
-              </p>
+      {/* Warnings */}
+      {warnings.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Warnings</p>
+          {warnings.map((w) => (
+            <div
+              key={w}
+              className="flex items-start gap-2.5 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5"
+            >
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+              <p className="text-sm text-foreground">{w}</p>
             </div>
-            <div className="rounded-md bg-muted/30 p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="size-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Active profile focus</span>
-              </div>
-              <p className="text-sm text-muted-foreground">{activeProfile?.focus}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          ))}
+        </div>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Active applications snapshot</CardTitle>
-          <CardDescription>Render sessions discovered from Windows Core Audio.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground md:col-span-2 xl:col-span-3">
-              No active audio sessions were discovered. Start playback in an app and refresh.
-            </p>
-          ) : (
-            sessions.map((session) => {
+      {/* Devices quick view */}
+      {(outputDevice || inputDevice) && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Default endpoints</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {outputDevice && (
+              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+                <MonitorSpeaker className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{outputDevice.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{outputDevice.state}</p>
+                </div>
+              </div>
+            )}
+            {inputDevice && (
+              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+                <Mic2 className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{inputDevice.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{inputDevice.state}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Active sessions snapshot */}
+      {sessions.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Active sessions ({sessions.length})
+          </p>
+          <div className="divide-y divide-border rounded-md border border-border">
+            {sessions.slice(0, 6).map((session) => {
               const volume = sessionVolumePercent(session);
               return (
-                <div key={session.id} className="rounded-md bg-muted/20 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="font-medium">{sessionDisplayLabel(session)}</span>
-                    <Badge variant="outline">{session.state}</Badge>
-                  </div>
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <p>{sessionProcessLabel(session)}</p>
-                    {volume !== null ? (
-                      <div className="flex items-center justify-between text-foreground">
-                        <span>Volume</span>
-                        <span>
-                          {volume}%{session.muted ? " • muted" : ""}
-                        </span>
-                      </div>
-                    ) : (
-                      <p>Volume unavailable for this session.</p>
+                <div
+                  key={session.id}
+                  className="flex items-center gap-3 px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{sessionDisplayLabel(session)}</p>
+                    {session.muted && (
+                      <p className="text-xs text-muted-foreground">Muted</p>
                     )}
-                    {volume !== null ? <Progress value={volume} /> : null}
                   </div>
+                  {volume !== null && (
+                    <div className="flex w-24 items-center gap-2">
+                      <Progress value={volume} className="h-1" />
+                      <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+                        {volume}%
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <MetricCard title="Discovery source" icon={Activity} value={discoveryStatus.source} />
-        <MetricCard title="Engine scope" icon={Waves} value="Routing/DSP mock only" />
-      </div>
+            })}
+            {sessions.length > 6 && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                +{sessions.length - 6} more sessions — see Apps page
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DeviceCard({
-  icon: Icon,
-  title,
-  name,
-  detail,
-}: {
-  icon: typeof MonitorSpeaker;
-  title: string;
-  name: string;
-  detail: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>Default endpoint from Windows multimedia role.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Icon className="size-4 text-muted-foreground" />
-        <div>
-          <p className="font-medium text-foreground">{name}</p>
-          <p className="text-sm text-muted-foreground">{detail}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MetricCard({
-  title,
-  icon: Icon,
+function StatusRow({
+  label,
   value,
+  sub,
+  active,
+  neutral,
 }: {
-  title: string;
-  icon: typeof Activity;
+  label: string;
   value: string;
+  sub: string;
+  active: boolean;
+  neutral?: boolean;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{value}</span>
-        <Icon className="size-4 text-muted-foreground" />
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-3 px-4 py-3">
+      {neutral ? (
+        <Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
+      ) : active ? (
+        <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
+      ) : (
+        <Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-medium text-foreground">{label}</span>
+          <span className="text-sm text-muted-foreground">{value}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </div>
+    </div>
   );
 }

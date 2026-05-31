@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRightLeft, RefreshCw, Volume2, VolumeX } from "lucide-react";
+import { RefreshCw, VolumeX, Volume2 } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/section-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -15,7 +13,6 @@ import {
 import { Slider } from "@/components/ui/slider";
 import {
   sessionDisplayLabel,
-  sessionProcessLabel,
   sessionVolumePercent,
 } from "@/lib/discovery-display";
 import { isSessionControllable } from "@/lib/session-target";
@@ -85,24 +82,18 @@ function SessionVolumeControl({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Session volume</span>
-        <span className="font-medium">
-          {draftVolume}%
-          {session.muted ? " • muted" : ""}
-          {isPending ? " • saving" : ""}
-        </span>
-      </div>
+    <div className="flex items-center gap-3">
       <Slider
         value={[draftVolume]}
-        min={0}
-        max={100}
-        step={1}
+        min={0} max={100} step={1}
         disabled={disabled}
         onValueChange={handleValueChange}
         onValueCommit={handleValueCommit}
+        className="flex-1"
       />
+      <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
+        {draftVolume}%{isPending ? "…" : ""}
+      </span>
     </div>
   );
 }
@@ -110,7 +101,6 @@ function SessionVolumeControl({
 export function AppsView({
   sessions,
   channels,
-  outputDevices,
   channelIdForSession,
   isLoading,
   isAssignmentsLoading,
@@ -125,38 +115,33 @@ export function AppsView({
   const defaultChannelId = channels[0]?.id ?? "";
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Applications"
-        title="Active session control"
-        description="Adjust per-app Windows session volume and mute. Audapp local channel labels are metadata only and do not route audio yet."
-        actions={
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
-            <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh sessions
-          </Button>
-        }
-      />
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Apps</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Per-app Windows session volume and mute. Channel assignment is local grouping only.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
+          <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
 
-      {assignmentsError ? (
+      {assignmentsError && (
         <p className="text-sm text-amber-600 dark:text-amber-400">{assignmentsError}</p>
-      ) : null}
+      )}
 
       {sessions.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No active sessions</CardTitle>
-            <CardDescription>
-              Start audio playback in an application, then refresh. System Sounds may appear when Windows plays UI audio.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <div className="rounded-md border border-border px-4 py-8 text-center">
+          <p className="text-sm font-medium text-muted-foreground">No active sessions</p>
+          <p className="mt-1 text-xs text-muted-foreground">Start audio playback in an application, then refresh.</p>
+        </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           {sessions.map((session) => {
             const channelId = channelIdForSession(session, defaultChannelId);
-            const channel = channels.find((item) => item.id === channelId);
-            const output = outputDevices.find((device) => device.id === session.deviceId);
             const controllable = isSessionControllable(session);
             const pending = isSessionPending(session);
             const inlineError = sessionError(session);
@@ -164,84 +149,65 @@ export function AppsView({
 
             return (
               <Card key={session.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>{sessionDisplayLabel(session)}</CardTitle>
-                      <CardDescription>{sessionProcessLabel(session)}</CardDescription>
-                    </div>
-                    <Badge variant="outline">{session.state}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                    <SessionVolumeControl
-                      session={session}
-                      disabled={!controllable}
-                      isPending={pending}
-                      onVolumeCommit={onVolumeCommit}
-                    />
-                    <div className="flex min-w-48 flex-col gap-3 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Playback device</p>
-                        <div className="mt-1 flex items-center gap-2 font-medium text-foreground">
-                          <ArrowRightLeft className="size-4 text-muted-foreground" />
-                          {output?.name ?? "Unknown endpoint"}
-                        </div>
-                      </div>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-sm font-semibold leading-tight">
+                      {sessionDisplayLabel(session)}
+                    </CardTitle>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {session.muted && (
+                        <span className="text-xs text-muted-foreground">Muted</span>
+                      )}
                       <Button
-                        variant="outline"
-                        size="sm"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
                         disabled={disabled}
                         onClick={() => onMuteToggle(session, !session.muted)}
+                        title={session.muted ? "Unmute" : "Mute"}
                       >
-                        {session.muted ? (
-                          <>
-                            <VolumeX className="size-4" />
-                            Unmute session
-                          </>
-                        ) : (
-                          <>
-                            <Volume2 className="size-4" />
-                            Mute session
-                          </>
-                        )}
+                        {session.muted
+                          ? <VolumeX className="size-3.5 text-muted-foreground" />
+                          : <Volume2 className="size-3.5 text-muted-foreground" />
+                        }
                       </Button>
                     </div>
                   </div>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <SessionVolumeControl
+                    session={session}
+                    disabled={!controllable}
+                    isPending={pending}
+                    onVolumeCommit={onVolumeCommit}
+                  />
 
-                  {!controllable ? (
-                    <p className="text-xs text-muted-foreground">
-                      Controls are disabled for expired or unsupported sessions.
-                    </p>
-                  ) : null}
-
-                  {inlineError ? (
-                    <p className="text-sm text-amber-600 dark:text-amber-400">{inlineError}</p>
-                  ) : null}
-
-                  <div className="grid gap-2">
-                    <p className="text-sm text-muted-foreground">Audapp local channel</p>
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-xs text-muted-foreground">Channel</span>
                     <Select
                       value={channelId}
                       disabled={isAssignmentsLoading || pending}
                       onValueChange={(value) => onChannelChange(session, value)}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select channel" />
+                      <SelectTrigger className="h-7 flex-1 text-xs">
+                        <SelectValue placeholder="Assign" />
                       </SelectTrigger>
                       <SelectContent>
                         {channels.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
+                          <SelectItem key={item.id} value={item.id} className="text-xs">
                             {item.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Local grouping to {channel?.name ?? "no channel"}. This does not move or route Windows audio yet.
-                    </p>
                   </div>
+
+                  {!controllable && (
+                    <p className="text-xs text-muted-foreground">Controls unavailable for this session.</p>
+                  )}
+                  {inlineError && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">{inlineError}</p>
+                  )}
                 </CardContent>
               </Card>
             );

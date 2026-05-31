@@ -38,15 +38,15 @@ import { ProfilesView } from "@/components/profiles/profiles-view";
 import { SettingsView } from "@/components/settings/settings-view";
 
 const navigation = [
-  { id: "dashboard", label: "Dashboard", description: "Overview and status" },
-  { id: "mixer", label: "Mixer", description: "Channel strip controls" },
-  { id: "apps", label: "Apps", description: "Session assignment grid" },
-  { id: "devices", label: "Devices", description: "Input/output inventory" },
-  { id: "equalizer", label: "Equalizer", description: "Headphone and mic EQ" },
-  { id: "noise", label: "Noise Suppression", description: "Microphone cleanup" },
-  { id: "profiles", label: "Profiles", description: "Reusable scenes" },
-  { id: "settings", label: "Settings", description: "Desktop behavior" },
-  { id: "engine", label: "Audio Engine Lab", description: "WASAPI test bench" },
+  { id: "dashboard", label: "Dashboard", description: "" },
+  { id: "mixer", label: "Mixer", description: "" },
+  { id: "apps", label: "Apps", description: "" },
+  { id: "devices", label: "Devices", description: "" },
+  { id: "equalizer", label: "Equalizer", description: "" },
+  { id: "noise", label: "Noise", description: "" },
+  { id: "profiles", label: "Profiles", description: "" },
+  { id: "settings", label: "Settings", description: "" },
+  { id: "engine", label: "Engine Lab", description: "" },
 ] as const satisfies ReadonlyArray<{
   id: SectionId;
   label: string;

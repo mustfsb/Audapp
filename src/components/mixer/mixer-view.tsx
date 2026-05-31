@@ -1,6 +1,3 @@
-import { SectionHeader } from "@/components/layout/section-header";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type { AudioChannel, AudioDevice } from "@/types/audio";
 
 import { ChannelStrip } from "./channel-strip";
@@ -20,33 +17,28 @@ interface MixerViewProps {
 
 export function MixerView(props: MixerViewProps) {
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Mixer"
-        title="Channel strips"
-        description="Local group controls — mute and volume apply to all sessions currently assigned to each channel. This does not route audio yet."
-        actions={
-          <Button variant="outline">
-            Create channel profile
-          </Button>
-        }
-      />
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold">Mixer</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Local group controls — mute and volume apply to all sessions assigned to each channel. Audio is not routed.
+        </p>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
         {props.channels.map((channel) => {
           const count = props.assignmentCountsByChannel[channel.id] ?? 0;
-          const sessionLabel =
-            count === 0
-              ? "No assigned sessions"
-              : count === 1
-                ? "1 active session"
-                : `${count} active sessions`;
 
           return (
-            <div key={channel.id} className="space-y-2">
-              <div className="flex items-center justify-between px-1">
-                <Badge variant="outline">{sessionLabel}</Badge>
-                <span className="text-xs text-muted-foreground">Local group controls</span>
+            <div key={channel.id} className="space-y-1.5">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-xs text-muted-foreground">
+                  {count === 0
+                    ? "No active sessions"
+                    : count === 1
+                      ? "1 active session"
+                      : `${count} active sessions`}
+                </span>
               </div>
               <ChannelStrip
                 channel={channel}

@@ -1,10 +1,9 @@
 import { Mic2, MonitorSpeaker, RefreshCw } from "lucide-react";
 
-import { SectionHeader } from "@/components/layout/section-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { deviceStateLabel } from "@/lib/discovery-display";
+import { cn } from "@/lib/utils";
 import type { AudioDiscoveryDevice } from "@/types/discovery";
 
 interface DevicesViewProps {
@@ -14,90 +13,72 @@ interface DevicesViewProps {
 }
 
 export function DevicesView({ devices, isLoading, onRefresh }: DevicesViewProps) {
-  const groups = {
-    output: devices.filter((device) => device.kind === "output"),
-    input: devices.filter((device) => device.kind === "input"),
-  };
+  const outputs = devices.filter((d) => d.kind === "output");
+  const inputs = devices.filter((d) => d.kind === "input");
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Devices"
-        title="Input and output inventory"
-        description="Endpoints enumerated from Windows Core Audio. Sample rate, bit depth, and latency are not reported in this phase."
-        actions={
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
-            <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh devices
-          </Button>
-        }
-      />
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <DeviceGroup
-          title="Output devices"
-          description="Playback endpoints discovered on the system."
-          icon={MonitorSpeaker}
-          devices={groups.output}
-        />
-        <DeviceGroup
-          title="Input devices"
-          description="Capture endpoints discovered on the system."
-          icon={Mic2}
-          devices={groups.input}
-        />
+    <div className="max-w-2xl space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Devices</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Windows audio endpoints discovered via Core Audio.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
+          <RefreshCw className={cn("size-3.5", isLoading && "animate-spin")} />
+          Refresh
+        </Button>
       </div>
+
+      <DeviceGroup title="Output" icon={MonitorSpeaker} devices={outputs} />
+      <DeviceGroup title="Input" icon={Mic2} devices={inputs} />
     </div>
   );
 }
 
 function DeviceGroup({
   title,
-  description,
   icon: Icon,
   devices,
 }: {
   title: string;
-  description: string;
   icon: typeof MonitorSpeaker;
   devices: AudioDiscoveryDevice[];
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <Icon className="size-4 text-muted-foreground" />
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {devices.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No devices found in this group.</p>
-        ) : (
-          devices.map((device) => (
-            <div key={device.id} className="rounded-md bg-muted/20 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">{device.name}</p>
-                  <p className="text-sm text-muted-foreground">Endpoint ID hidden in UI</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {device.isDefault ? <Badge>Default</Badge> : null}
-                  <Badge variant={device.state === "active" ? "secondary" : "outline"}>
-                    {deviceStateLabel(device.state)}
-                  </Badge>
-                </div>
+    <section className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Icon className="size-3.5 text-muted-foreground" />
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      </div>
+      {devices.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">No {title.toLowerCase()} devices found.</p>
+      ) : (
+        <div className="divide-y divide-border rounded-md border border-border">
+          {devices.map((device) => (
+            <div key={device.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{device.name}</p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Routing, format details, and health metrics are not implemented in Phase 2B.
-              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                {device.isDefault && <Badge className="text-xs h-5 px-1.5">Default</Badge>}
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs h-5 px-1.5",
+                    device.state === "active"
+                      ? "border-green-500/30 text-green-600 dark:text-green-400"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {deviceStateLabel(device.state)}
+                </Badge>
+              </div>
             </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
