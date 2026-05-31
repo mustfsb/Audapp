@@ -42,3 +42,23 @@ export type DeviceFormatInfo = {
   bitsPerSample: number | null;
   isFloat: boolean;
 };
+
+export type DspRuntimeConfig = {
+  enabled: boolean;
+  outputGainDb: number;
+  inputGainDb: number;
+  highPassEnabled: boolean;
+  highPassHz: number;
+  lowPassEnabled: boolean;
+  lowPassHz: number;
+};
+
+export type DspRuntimeStatus = {
+  enabled: boolean;
+  activeInEngine: boolean;
+  supported: boolean;
+  unsupportedReason: string | null;
+  sampleFormat: string | null;
+  configVersion: number;
+  lastUpdatedAt: string;
+};

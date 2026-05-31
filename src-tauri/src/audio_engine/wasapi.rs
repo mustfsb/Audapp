@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::audio_engine::dsp::DspPipeline;
 use crate::audio_engine::metrics::estimated_latency_ms;
 use crate::audio_engine::tone::ToneGenerator;
 use crate::audio_engine::types::{AudioEngineRuntimeStatus, EngineMode, EngineState};
@@ -200,6 +201,10 @@ fn run_wasapi_stream(
         s.updated_at = chrono::Utc::now().to_rfc3339();
     }
 
+    let dsp_shared = crate::audio_engine::dsp::config::global();
+    let mut dsp_pipeline = DspPipeline::new();
+    dsp_pipeline.prepare(sample_rate as f32, channels as usize, dsp_shared, is_float, bits_per_sample);
+
     if is_capture {
         run_capture_loop(
             &audio_client,
@@ -213,6 +218,7 @@ fn run_wasapi_stream(
             rms_bits,
             glitch_count,
             shared_status,
+            &mut dsp_pipeline,
         );
     } else {
         run_render_loop(
@@ -228,11 +234,13 @@ fn run_wasapi_stream(
             stop_flag,
             glitch_count,
             shared_status,
+            &mut dsp_pipeline,
         );
     }
 
     let _ = unsafe { audio_client.Stop() };
     let _ = unsafe { audio_client.Reset() };
+    dsp_pipeline.deactivate();
 
     {
         let mut s = shared_status.lock().unwrap_or_else(|p| p.into_inner());
@@ -257,6 +265,7 @@ fn run_render_loop(
     stop_flag: &Arc<AtomicBool>,
     glitch_count: &Arc<AtomicU32>,
     shared_status: &Arc<Mutex<AudioEngineRuntimeStatus>>,
+    dsp_pipeline: &mut DspPipeline,
 ) {
     let Ok(render_client) = (unsafe { audio_client.GetService::<IAudioRenderClient>() }) else {
         write_error(shared_status, "Failed to get render client.");
@@ -277,6 +286,9 @@ fn run_render_loop(
         if stop_flag.load(Ordering::Relaxed) {
             break;
         }
+
+        // Once per buffer cycle: refresh DSP config snapshot and recompute coefficients if needed
+        dsp_pipeline.maybe_refresh();
 
         let padding = match unsafe { audio_client.GetCurrentPadding() } {
             Ok(p) => p,
@@ -307,7 +319,8 @@ fn run_render_loop(
                         std::slice::from_raw_parts_mut(data_ptr as *mut f32, total)
                     };
                     for frame in 0..available as usize {
-                        let s = tone.next_sample();
+                        // Apply output DSP chain (gain → HPF → LPF) if enabled
+                        let s = dsp_pipeline.process_render_mono(tone.next_sample());
                         for c in 0..ch {
                             slice[frame * ch + c] = s;
                         }
@@ -358,6 +371,7 @@ fn run_capture_loop(
     rms_bits: &Arc<AtomicU32>,
     glitch_count: &Arc<AtomicU32>,
     shared_status: &Arc<Mutex<AudioEngineRuntimeStatus>>,
+    dsp_pipeline: &mut DspPipeline,
 ) {
     let Ok(capture_client) = (unsafe { audio_client.GetService::<IAudioCaptureClient>() }) else {
         write_error(shared_status, "Failed to get capture client.");
@@ -376,6 +390,9 @@ fn run_capture_loop(
         if stop_flag.load(Ordering::Relaxed) {
             break;
         }
+
+        // Once per buffer cycle: refresh DSP config snapshot and recompute coefficients if needed
+        dsp_pipeline.maybe_refresh();
 
         loop {
             let packet_size = match unsafe { capture_client.GetNextPacketSize() } {
@@ -413,7 +430,8 @@ fn run_capture_loop(
             if !data_ptr.is_null() && frames_available > 0 {
                 let total = frames_available as usize * ch;
                 let (peak, rms_val) = if is_float {
-                    compute_peak_rms_f32(data_ptr, total)
+                    // Apply input DSP chain (gain → HPF → LPF) per channel before metering
+                    compute_peak_rms_f32_dsp(data_ptr, frames_available as usize, ch, dsp_pipeline)
                 } else if bits_per_sample == 16 {
                     compute_peak_rms_i16(data_ptr, total)
                 } else {
@@ -436,22 +454,31 @@ fn run_capture_loop(
 
 #[cfg(windows)]
 #[inline]
-fn compute_peak_rms_f32(data: *mut u8, total_samples: usize) -> (f32, f32) {
-    let slice = unsafe { std::slice::from_raw_parts(data as *const f32, total_samples) };
+fn compute_peak_rms_f32_dsp(
+    data: *mut u8,
+    frames: usize,
+    channels: usize,
+    dsp: &mut DspPipeline,
+) -> (f32, f32) {
+    let total = frames * channels;
+    if total == 0 {
+        return (0.0, 0.0);
+    }
+    let slice = unsafe { std::slice::from_raw_parts(data as *const f32, total) };
     let mut peak: f32 = 0.0;
     let mut sum_sq: f32 = 0.0;
-    for &s in slice {
-        let abs = s.abs();
-        if abs > peak {
-            peak = abs;
+    for frame in 0..frames {
+        for ch in 0..channels {
+            // Apply input DSP (gain → HPF → LPF); returns sample unchanged when DSP is off
+            let s = dsp.process_capture_sample(slice[frame * channels + ch], ch);
+            let abs = s.abs();
+            if abs > peak {
+                peak = abs;
+            }
+            sum_sq += s * s;
         }
-        sum_sq += s * s;
     }
-    let rms = if total_samples > 0 {
-        (sum_sq / total_samples as f32).sqrt()
-    } else {
-        0.0
-    };
+    let rms = (sum_sq / total as f32).sqrt();
     (peak, rms)
 }
 

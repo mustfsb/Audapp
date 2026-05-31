@@ -20,6 +20,10 @@ pub fn run() {
             audio_engine_commands::get_audio_device_formats,
             audio_engine_commands::start_audio_engine_test,
             audio_engine_commands::stop_audio_engine_test,
+            audio_engine_commands::get_dsp_config,
+            audio_engine_commands::set_dsp_config,
+            audio_engine_commands::reset_dsp_config,
+            audio_engine_commands::get_dsp_status,
         ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::Destroyed = event {

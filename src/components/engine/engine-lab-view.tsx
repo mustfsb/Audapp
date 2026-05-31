@@ -13,9 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { useAudioEngine } from "@/lib/use-audio-engine";
+import { useAudioDsp } from "@/lib/use-audio-dsp";
 import type { AudioDiscoveryDevice } from "@/types/discovery";
-import type { AudioEngineMode } from "@/types/audio-engine";
+import type { AudioEngineMode, DspRuntimeConfig } from "@/types/audio-engine";
 
 interface EngineLabViewProps {
   outputDevices: AudioDiscoveryDevice[];
@@ -43,8 +45,27 @@ function stateColor(state: string): string {
   }
 }
 
+function dspStatusBadge(
+  enabled: boolean,
+  active: boolean,
+  supported: boolean,
+): { label: string; className: string } {
+  if (!supported)
+    return {
+      label: "unsupported",
+      className: "bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30",
+    };
+  if (enabled && active)
+    return {
+      label: "active",
+      className: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30",
+    };
+  return { label: "disabled", className: "bg-muted text-muted-foreground border-border" };
+}
+
 export function EngineLabView({ outputDevices, inputDevices }: EngineLabViewProps) {
   const { status, isLoading, error, start, stop, refresh } = useAudioEngine();
+  const dsp = useAudioDsp();
 
   const [selectedOutputId, setSelectedOutputId] = useState<string>("");
   const [selectedInputId, setSelectedInputId] = useState<string>("");
@@ -313,6 +334,181 @@ export function EngineLabView({ outputDevices, inputDevices }: EngineLabViewProp
           </CardContent>
         </Card>
       </div>
+
+      {/* DSP / EQ Test card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">DSP / EQ Test</CardTitle>
+              <CardDescription>
+                Test-only gain and filter processing for Engine Lab streams only.
+              </CardDescription>
+            </div>
+            {dsp.status && (() => {
+              const badge = dspStatusBadge(
+                dsp.status.enabled,
+                dsp.status.activeInEngine,
+                dsp.status.supported,
+              );
+              return (
+                <Badge variant="outline" className={badge.className}>
+                  {badge.label}
+                </Badge>
+              );
+            })()}
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Enable DSP</label>
+            <Switch
+              checked={dsp.config.enabled}
+              onCheckedChange={(checked) => {
+                const next: DspRuntimeConfig = { ...dsp.config, enabled: checked };
+                void dsp.commitConfig(next);
+              }}
+              disabled={dsp.isLoading}
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Output Gain</label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {dsp.config.outputGainDb > 0 ? "+" : ""}
+                  {dsp.config.outputGainDb.toFixed(1)} dB
+                </span>
+              </div>
+              <Slider
+                min={-24}
+                max={12}
+                step={0.5}
+                value={[dsp.config.outputGainDb]}
+                disabled={!dsp.config.enabled || dsp.isLoading}
+                onValueChange={([v]) => {
+                  if (v !== undefined) dsp.setConfig({ ...dsp.config, outputGainDb: v });
+                }}
+                onValueCommit={([v]) => {
+                  if (v !== undefined) void dsp.commitConfig({ ...dsp.config, outputGainDb: v });
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Input Gain</label>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {dsp.config.inputGainDb > 0 ? "+" : ""}
+                  {dsp.config.inputGainDb.toFixed(1)} dB
+                </span>
+              </div>
+              <Slider
+                min={-24}
+                max={12}
+                step={0.5}
+                value={[dsp.config.inputGainDb]}
+                disabled={!dsp.config.enabled || dsp.isLoading}
+                onValueChange={([v]) => {
+                  if (v !== undefined) dsp.setConfig({ ...dsp.config, inputGainDb: v });
+                }}
+                onValueCommit={([v]) => {
+                  if (v !== undefined) void dsp.commitConfig({ ...dsp.config, inputGainDb: v });
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">High-Pass Filter</label>
+                <Switch
+                  size="sm"
+                  checked={dsp.config.highPassEnabled}
+                  disabled={!dsp.config.enabled || dsp.isLoading}
+                  onCheckedChange={(checked) => {
+                    void dsp.commitConfig({ ...dsp.config, highPassEnabled: checked });
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Cutoff</span>
+                <span className="tabular-nums">{dsp.config.highPassHz.toFixed(0)} Hz</span>
+              </div>
+              <Slider
+                min={20}
+                max={300}
+                step={1}
+                value={[dsp.config.highPassHz]}
+                disabled={!dsp.config.enabled || !dsp.config.highPassEnabled || dsp.isLoading}
+                onValueChange={([v]) => {
+                  if (v !== undefined) dsp.setConfig({ ...dsp.config, highPassHz: v });
+                }}
+                onValueCommit={([v]) => {
+                  if (v !== undefined) void dsp.commitConfig({ ...dsp.config, highPassHz: v });
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Low-Pass Filter</label>
+                <Switch
+                  size="sm"
+                  checked={dsp.config.lowPassEnabled}
+                  disabled={!dsp.config.enabled || dsp.isLoading}
+                  onCheckedChange={(checked) => {
+                    void dsp.commitConfig({ ...dsp.config, lowPassEnabled: checked });
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Cutoff</span>
+                <span className="tabular-nums">{dsp.config.lowPassHz.toFixed(0)} Hz</span>
+              </div>
+              <Slider
+                min={4000}
+                max={20000}
+                step={100}
+                value={[dsp.config.lowPassHz]}
+                disabled={!dsp.config.enabled || !dsp.config.lowPassEnabled || dsp.isLoading}
+                onValueChange={([v]) => {
+                  if (v !== undefined) dsp.setConfig({ ...dsp.config, lowPassHz: v });
+                }}
+                onValueCommit={([v]) => {
+                  if (v !== undefined) void dsp.commitConfig({ ...dsp.config, lowPassHz: v });
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void dsp.reset()}
+              disabled={dsp.isLoading}
+            >
+              Reset to flat
+            </Button>
+            {dsp.status?.unsupportedReason && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                {dsp.status.unsupportedReason}
+              </p>
+            )}
+            {dsp.error && (
+              <p className="text-xs text-destructive">{dsp.error}</p>
+            )}
+          </div>
+
+          <p className="rounded-md border border-border bg-muted/50 p-2 text-xs text-muted-foreground">
+            DSP is test-only and applies only to Audio Engine Lab streams. It does not process app
+            audio, channel routing, or system output yet.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
