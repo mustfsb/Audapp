@@ -1,52 +1,67 @@
-import { AlertTriangle, CheckCircle2, Circle, Mic2, MonitorSpeaker, RefreshCw } from "lucide-react";
+import {
+  Gamepad2,
+  Globe,
+  MessageCircle,
+  Mic2,
+  MonitorSpeaker,
+  Music,
+  RefreshCw,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import {
-  discoveryStatusLabel,
-  formatDiscoveryRefreshTime,
-  sessionDisplayLabel,
-  sessionVolumePercent,
-} from "@/lib/discovery-display";
-import { useAudioEngine } from "@/lib/use-audio-engine";
-import { useAudioDsp } from "@/lib/use-audio-dsp";
-import type { AudioDiscoveryDevice, AudioDiscoverySession, AudioDiscoveryStatus } from "@/types/discovery";
-import type { AudioProfile, EngineStatus } from "@/types/audio";
+import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
+import { mockSessions } from "@/data/mock-audio";
+import type { AudioChannel, AudioDevice } from "@/types/audio";
+
+const channelIcons: Record<string, React.ElementType> = {
+  system: Volume2,
+  game: Gamepad2,
+  chat: MessageCircle,
+  browser: Globe,
+  music: Music,
+  mic: Mic2,
+};
 
 interface DashboardViewProps {
-  engineStatus: EngineStatus;
-  discoveryStatus: AudioDiscoveryStatus;
-  outputDevice: AudioDiscoveryDevice | undefined;
-  inputDevice: AudioDiscoveryDevice | undefined;
-  sessions: AudioDiscoverySession[];
-  profiles: AudioProfile[];
+  devices: AudioDevice[];
+  selectedOutputId: string;
+  selectedInputId: string;
+  onSelectOutput: (id: string) => void;
+  onSelectInput: (id: string) => void;
+  channels: AudioChannel[];
+  onVolumeChange: (id: string, value: number) => void;
+  onVolumeCommit: (id: string, value: number) => void;
+  onMuteToggle: (id: string, muted: boolean) => void;
   isDiscoveryLoading: boolean;
   onRefreshDiscovery: () => void;
 }
 
 export function DashboardView({
-  discoveryStatus,
-  outputDevice,
-  inputDevice,
-  sessions,
+  devices,
+  selectedOutputId,
+  selectedInputId,
+  onSelectOutput,
+  onSelectInput,
+  channels,
+  onVolumeChange,
+  onVolumeCommit,
+  onMuteToggle,
   isDiscoveryLoading,
   onRefreshDiscovery,
 }: DashboardViewProps) {
-  const { status: engineRuntime } = useAudioEngine();
-  const dsp = useAudioDsp();
-
-  const isEngineRunning = engineRuntime.state === "running";
-  const isDspActive = dsp.status?.enabled && dsp.status.activeInEngine;
-  const warnings = discoveryStatus.warnings;
+  const outputDevices = devices.filter((d) => d.kind === "output");
+  const inputDevices = devices.filter((d) => d.kind === "input");
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-4xl space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Overview</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            System status at a glance.
-          </p>
+          <p className="mt-0.5 text-sm text-muted-foreground">Control center</p>
         </div>
         <Button
           variant="outline"
@@ -54,184 +69,186 @@ export function DashboardView({
           onClick={onRefreshDiscovery}
           disabled={isDiscoveryLoading}
         >
-          <RefreshCw className={`size-3.5 ${isDiscoveryLoading ? "animate-spin" : ""}`} />
+          <RefreshCw className={cn("size-3.5", isDiscoveryLoading && "animate-spin")} />
           Refresh
         </Button>
       </div>
 
-      {/* Status rows */}
-      <div className="rounded-xl bg-card divide-y divide-border/50">
-        <StatusRow
-          label="Discovery"
-          value={discoveryStatusLabel(discoveryStatus)}
-          sub={formatDiscoveryRefreshTime(discoveryStatus.refreshedAt)}
-          active={discoveryStatus.deviceCount > 0}
+      {/* Device Selectors */}
+      <div className="grid grid-cols-2 gap-3">
+        <DeviceSelector
+          label="Output"
+          icon={MonitorSpeaker}
+          devices={outputDevices}
+          selectedId={selectedOutputId}
+          onSelect={onSelectOutput}
         />
-        <StatusRow
-          label="Devices"
-          value={`${discoveryStatus.deviceCount} endpoint${discoveryStatus.deviceCount !== 1 ? "s" : ""}`}
-          sub={
-            outputDevice
-              ? `Output: ${outputDevice.name}`
-              : inputDevice
-                ? `Input: ${inputDevice.name}`
-                : "No default endpoint detected"
-          }
-          active={discoveryStatus.deviceCount > 0}
-        />
-        <StatusRow
-          label="Active sessions"
-          value={`${discoveryStatus.sessionCount} session${discoveryStatus.sessionCount !== 1 ? "s" : ""}`}
-          sub="From Apps page — volume and mute are real"
-          active={discoveryStatus.sessionCount > 0}
-        />
-        <StatusRow
-          label="Mixer"
-          value="Local group controls"
-          sub="Applies volume/mute to assigned sessions — not routed"
-          active={false}
-          neutral
-        />
-        <StatusRow
-          label="Audio Engine Lab"
-          value={isEngineRunning ? `Running · ${engineRuntime.mode?.replace(/_/g, " ") ?? ""}` : "Stopped"}
-          sub={
-            isEngineRunning && engineRuntime.sampleRate
-              ? `${engineRuntime.sampleRate / 1000} kHz · ${engineRuntime.channels}ch`
-              : "Test-only WASAPI streams"
-          }
-          active={isEngineRunning}
-        />
-        <StatusRow
-          label="DSP / EQ"
-          value={
-            isDspActive
-              ? "Active"
-              : dsp.config.enabled
-                ? "Enabled (engine stopped)"
-                : "Disabled"
-          }
-          sub="Test-only · Engine Lab streams only"
-          active={!!isDspActive}
-          neutral={!isDspActive}
+        <DeviceSelector
+          label="Input"
+          icon={Mic2}
+          devices={inputDevices}
+          selectedId={selectedInputId}
+          onSelect={onSelectInput}
         />
       </div>
 
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Warnings</p>
-          {warnings.map((w) => (
+      {/* Mixer */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Mixer</p>
+        <div className="divide-y divide-border/50 rounded-xl bg-card">
+          {channels.map((channel) => {
+            const Icon = channelIcons[channel.id] ?? Volume2;
+            return (
+              <HorizontalChannelStrip
+                key={channel.id}
+                channel={channel}
+                icon={Icon}
+                onVolumeChange={onVolumeChange}
+                onVolumeCommit={onVolumeCommit}
+                onMuteToggle={onMuteToggle}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Sessions Snapshot */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          Active sessions ({mockSessions.length})
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {mockSessions.map((session) => (
             <div
-              key={w}
-              className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5"
+              key={session.id}
+              className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5"
             >
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-              <p className="text-sm text-foreground">{w}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{session.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{session.process}</p>
+              </div>
+              <div className="flex w-28 items-center gap-2">
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground/30"
+                    style={{ width: `${session.volume}%` }}
+                  />
+                </div>
+                <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+                  {session.volume}%
+                </span>
+              </div>
             </div>
           ))}
         </div>
-      )}
-
-      {/* Devices quick view */}
-      {(outputDevice || inputDevice) && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Default endpoints</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {outputDevice && (
-              <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
-                <MonitorSpeaker className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{outputDevice.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{outputDevice.state}</p>
-                </div>
-              </div>
-            )}
-            {inputDevice && (
-              <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
-                <Mic2 className="size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{inputDevice.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{inputDevice.state}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Active sessions snapshot */}
-      {sessions.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            Active sessions ({sessions.length})
-          </p>
-          <div className="divide-y divide-border/50 rounded-xl bg-card">
-            {sessions.slice(0, 6).map((session) => {
-              const volume = sessionVolumePercent(session);
-              return (
-                <div
-                  key={session.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{sessionDisplayLabel(session)}</p>
-                    {session.muted && (
-                      <p className="text-xs text-muted-foreground">Muted</p>
-                    )}
-                  </div>
-                  {volume !== null && (
-                    <div className="flex w-24 items-center gap-2">
-                      <Progress value={volume} className="h-1" />
-                      <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
-                        {volume}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {sessions.length > 6 && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                +{sessions.length - 6} more sessions — see Apps page
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function StatusRow({
+function DeviceSelector({
   label,
-  value,
-  sub,
-  active,
-  neutral,
+  icon: Icon,
+  devices,
+  selectedId,
+  onSelect,
 }: {
   label: string;
-  value: string;
-  sub: string;
-  active: boolean;
-  neutral?: boolean;
+  icon: React.ElementType;
+  devices: AudioDevice[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const selected = devices.find((d) => d.id === selectedId) ?? devices[0];
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Icon className="size-3.5 text-muted-foreground" />
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      </div>
+      <div className="overflow-hidden rounded-xl bg-card divide-y divide-border/50">
+        {selected && (
+          <div className="bg-sidebar-accent/60 px-3.5 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium leading-tight">{selected.name}</p>
+              <span
+                className={cn(
+                  "mt-0.5 inline-block size-1.5 shrink-0 rounded-full",
+                  selected.health === "Healthy" ? "bg-green-500" : "bg-amber-500",
+                )}
+              />
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {selected.connection} · {selected.sampleRate / 1000} kHz · {selected.bitDepth}-bit
+            </p>
+          </div>
+        )}
+        {devices
+          .filter((d) => d.id !== selected?.id)
+          .map((device) => (
+            <button
+              key={device.id}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/50"
+              onClick={() => onSelect(device.id)}
+            >
+              <span
+                className={cn(
+                  "inline-block size-1.5 shrink-0 rounded-full",
+                  device.health === "Healthy" ? "bg-green-500/60" : "bg-amber-500/60",
+                )}
+              />
+              <span className="truncate text-sm text-muted-foreground">{device.name}</span>
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function HorizontalChannelStrip({
+  channel,
+  icon: Icon,
+  onVolumeChange,
+  onVolumeCommit,
+  onMuteToggle,
+}: {
+  channel: AudioChannel;
+  icon: React.ElementType;
+  onVolumeChange: (id: string, value: number) => void;
+  onVolumeCommit: (id: string, value: number) => void;
+  onMuteToggle: (id: string, muted: boolean) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      {neutral ? (
-        <Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
-      ) : active ? (
-        <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />
-      ) : (
-        <Circle className="size-3.5 shrink-0 text-muted-foreground/40" />
+    <div
+      className={cn(
+        "flex items-center gap-3 px-4 py-3 transition-opacity",
+        channel.muted && "opacity-50",
       )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          <span className="text-sm text-muted-foreground">{value}</span>
-        </div>
-        <p className="text-xs text-muted-foreground">{sub}</p>
-      </div>
+    >
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="w-16 shrink-0 text-sm">{channel.name}</span>
+      <Slider
+        className="flex-1"
+        value={[channel.volume]}
+        min={0}
+        max={100}
+        step={1}
+        onValueChange={(values) => onVolumeChange(channel.id, values[0] ?? channel.volume)}
+        onValueCommit={(values) => onVolumeCommit(channel.id, values[0] ?? channel.volume)}
+      />
+      <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+        {channel.volume}%
+      </span>
+      <Button
+        variant={channel.muted ? "destructive" : "ghost"}
+        size="icon"
+        className="size-7 shrink-0"
+        onClick={() => onMuteToggle(channel.id, !channel.muted)}
+        aria-label={channel.muted ? `Unmute ${channel.name}` : `Mute ${channel.name}`}
+      >
+        {channel.muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+      </Button>
     </div>
   );
 }

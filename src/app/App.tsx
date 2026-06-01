@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState, typ
 
 import {
   mockChannels,
+  mockDevices,
   mockEngineStatus,
   mockNoiseSuppression,
   mockProfiles,
@@ -65,6 +66,8 @@ export default function App() {
   const [noiseSuppression, setNoiseSuppression] =
     useState<NoiseSuppressionState>(mockNoiseSuppression);
   const [settings, setSettings] = useState<AppSettings>(mockSettings);
+  const [selectedOutputId, setSelectedOutputId] = useState("out-1");
+  const [selectedInputId, setSelectedInputId] = useState("in-1");
 
   const {
     snapshot,
@@ -111,12 +114,6 @@ export default function App() {
   const outputDevices = useMemo(
     () => discoveryDevices.filter((device) => device.kind === "output"),
     [discoveryDevices],
-  );
-  const outputDevice = discoveryDevices.find(
-    (device) => device.kind === "output" && device.isDefault,
-  );
-  const inputDevice = discoveryDevices.find(
-    (device) => device.kind === "input" && device.isDefault,
   );
 
   const mixerOutputDevices = useMemo(
@@ -279,12 +276,25 @@ export default function App() {
   const content = {
     dashboard: (
       <DashboardView
-        engineStatus={engineStatus}
-        discoveryStatus={discoveryStatus}
-        outputDevice={outputDevice}
-        inputDevice={inputDevice}
-        sessions={discoverySessions}
-        profiles={profiles}
+        devices={mockDevices}
+        selectedOutputId={selectedOutputId}
+        selectedInputId={selectedInputId}
+        onSelectOutput={setSelectedOutputId}
+        onSelectInput={setSelectedInputId}
+        channels={channels}
+        onVolumeChange={(id, value) =>
+          updateChannel(id, (ch) => ({
+            ...ch,
+            volume: value,
+            peak: Math.min(100, value + 6),
+            meterHold: Math.min(100, value + 12),
+          }))
+        }
+        onVolumeCommit={(id, value) => {
+          updateChannel(id, (ch) => ({ ...ch, volume: value }));
+          void handleMixerVolumeCommit(id, value);
+        }}
+        onMuteToggle={(id, muted) => void handleMixerMuteToggle(id, muted)}
         isDiscoveryLoading={isDiscoveryLoading}
         onRefreshDiscovery={() => void refreshDiscovery()}
       />
