@@ -1,33 +1,13 @@
 {
   "upstreamRepository": "https://github.com/microsoft/Windows-driver-samples",
   "acxSamplePath": "audio/Acx/Samples/AudioCodec/Driver",
-  "sysvadReferencePath": "audio/sysvad",
-  "requiredAcxFiles": [
-    "AudioCodec.inf",
-    "AudioCodec.sln",
-    "AudioCodec.vcxproj",
-    "AudioCodec.vcxproj.Filters",
-    "Device.cpp",
-    "Driver.cpp",
-    "DriverSettings.h",
-    "ReadMe.txt",
-    "Resources.rc"
-  ],
-  "sysvadReferenceFiles": [
-    "sysvad.sln",
-    "adapter.cpp",
-    "common.cpp",
-    "common.h",
-    "README.md"
-  ],
-  "sysvadReferenceDirectories": [
-    "EndpointsCommon",
-    "Package"
-  ],
+  "commonSamplePath": "audio/Acx/Samples/Common",
+  "incSamplePath": "audio/Acx/Samples/Inc",
+  "sharedSamplePath": "audio/Acx/Samples/Shared",
   "targetEndpointName": "Audapp Input",
   "notes": [
-    "ACX remains the implementation target.",
-    "SYSVAD remains a topology and packaging reference only.",
-    "Import through prepare.ps1 instead of committing a broad sample dump."
+    "This scaffold is compile-only.",
+    "build.ps1 forces SignMode=Off, DriverPackage=False, and SupportsPackaging=false.",
+    "No driver install, load, or test-signing belongs in this tree."
   ]
 }

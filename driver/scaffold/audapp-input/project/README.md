@@ -1,10 +1,10 @@
 # Project staging area
 
-This directory is the isolated staging area for imported upstream sample files and any minimal Audapp-specific adaptation notes.
+This directory is the isolated staging area for imported upstream sample files and minimal Audapp-specific compile-only adaptations.
 
 ## Rules
 
-- Keep imported upstream files in `upstream-audiocodec/`.
-- Do not hand-copy large sample trees without updating `PROVENANCE.md`.
+- Keep imported upstream driver files in `upstream-audiocodec/`.
+- Keep build outputs untracked.
 - Do not point Cargo, npm, or Tauri at this directory.
-- Stop and document blockers instead of inflating this tree with unrelated sample code.
+- Do not add install, load, or signing automation here.

@@ -38,13 +38,13 @@ Compile-only minimal "Audapp Input" virtual endpoint POC
 | # | Item | Status |
 |---|------|--------|
 | 13 | Windows 11 dev host | Assumed from current Audapp environment |
-| 14 | WDK version matches installed Windows SDK | Blocked - WDK build root not found |
-| 15 | Spectre-mitigated libs installed | Unknown |
+| 14 | WDK version matches installed Windows SDK | Complete - WDK `10.0.28000.0` present |
+| 15 | Spectre-mitigated libs installed | Assumed from current VS18 toolchain, not separately audited |
 | 16 | VM or disposable test machine available | Unknown |
 | 17 | VM snapshot procedure documented | Documented, not verified in session |
 | 18 | Test-signing understood but not enabled | Documented and unchanged |
 | 19 | Local official `Windows-driver-samples` checkout exists | Complete - `C:\Users\mustafa\source\repos\Windows-driver-samples` |
-| 20 | Preferred VS 2022 toolchain available | Complete - Build Tools 2022 detected |
+| 20 | Preferred VS18 toolchain available | Complete - VS 2026 developer environment detected |
 
 ## Install gates
 
@@ -88,8 +88,8 @@ When proceeding to install later with separate approval:
 
 ```text
 Go / No-Go:
-- Go for more compile-only work once WDK tooling is installed into the Windows Kits build tree.
-- No-Go for install work and No-Go for Phase 11D implementation until a real Phase 11C compile result exists.
+- Go for Phase 11D work because the compile-only scaffold now builds successfully under VS18 / WDK28000.
+- No-Go for any install, load, or signing experiment until a later explicitly approved phase.
 ```
 
 ## Related documents

@@ -108,17 +108,29 @@ Environment facts observed in this session:
 
 - Visual Studio Community 2026 is installed at `C:\Program Files\Microsoft Visual Studio\18\Community`
 - Visual Studio 2022 Build Tools are also installed at `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools`
-- current WDK documentation does not validate Visual Studio 2026 for driver development, so the scaffold now prefers Visual Studio 2022 when available
-- `msbuild` and `cl` are not available directly from the current PowerShell session
-- a Visual Studio developer command environment is available through `VsDevCmd.bat` / `LaunchDevCmd.bat`
+- `msbuild` and `cl` are available in the Visual Studio 2026 developer environment
 - `pwsh` is not installed, so commands in this repo must run through Windows PowerShell
-- Windows SDK include/lib roots exist, but `C:\Program Files (x86)\Windows Kits\10\build` is missing
-- kernel-mode WDK headers such as `C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km` are missing
-- local official sample checkout now exists at `C:\Users\mustafa\source\repos\Windows-driver-samples`
+- WDK build version `10.0.28000.0` exists at `C:\Program Files (x86)\Windows Kits\10\build\10.0.28000.0`
+- installed WDK task DLLs are `Microsoft.DriverKit.Build.Tasks.18.0.dll` and `Microsoft.DriverKit.Build.Tasks.PackageVerifier.18.0.dll`
+- local official sample checkout exists at `C:\Users\mustafa\source\repos\Windows-driver-samples`
 - expected ACX sample path exists at `C:\Users\mustafa\source\repos\Windows-driver-samples\audio\Acx\Samples\AudioCodec\Driver`
-- an official `winget` install attempt for `Microsoft.WindowsWDK.10.0.26100` downloaded the installer but failed before completing WDK setup with installer exit `2147944002`
+- `prepare.ps1` succeeds and refreshes the isolated `upstream-audiocodec` sample snapshot
+- the scaffold now vendors the minimal shared source set required for compile-only work:
+  - `Common/` from `audio/Acx/Samples/Common`
+  - `inc/AudioFormats.h` and `inc/cpp_utils.h`
+  - `shared/Public.h` and `shared/Trace.h`
+- the original scaffold wrapper selected the wrong toolchain/task version path and could trigger a `Microsoft.DriverKit.Build.Tasks.17.0.dll` load failure
+- `build.ps1` now forces compile-only behavior with `SignMode=Off`, `DriverPackage=False`, and `SupportsPackaging=false`
 
-`prepare.ps1` can run in the current environment. `build.ps1` remains blocked at WDK detection because the WDK build tree and kernel headers are not installed.
+Current status:
+
+- `prepare.ps1`: succeeds
+- `build.ps1`: compile-only build succeeds under VS18 / WDK 10.0.28000.0
+- successful compile-only output:
+  - `C:\Users\mustafa\Audapp\driver\scaffold\audapp-input\project\upstream-audiocodec\x64\Debug\AudioCodec.sys`
+  - `C:\Users\mustafa\Audapp\driver\scaffold\audapp-input\project\build\AudioCodec-Debug-x64.binlog`
+- no driver was installed or loaded
+- final successful build did not test-sign
 
 ## What success means
 
@@ -141,20 +153,17 @@ Environment facts observed in this session:
 Current recommendation:
 
 ```text
-No-Go for Phase 11D implementation until Phase 11C reaches a real compile result.
+Go for Phase 11D planning and implementation work, because the Phase 11C compile-only scaffold now builds successfully.
 ```
 
 Go conditions:
 
-- a local official `Windows-driver-samples` checkout is available
-- WDK build tools are installed and discoverable
-- kernel-mode WDK headers are installed
-- `build.ps1` reaches `msbuild` without environment errors
+- the VS18 / WDK28000 compile-only path is fixed
+- the scaffold imports the shared headers and support sources required by `SamplesCommon`
 - the isolated sample-based scaffold compiles without adding app dependencies
 
 No-Go conditions:
 
-- WDK build tooling is still missing
-- the current session cannot complete WDK installation
+- compile-only output regresses or starts requiring install/load/signing behavior
 - compile requires broad undocumented vendoring beyond the current reviewed path
 - the work starts drifting into install, signing, or app integration scope

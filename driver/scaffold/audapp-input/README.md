@@ -25,7 +25,7 @@ The long-term purpose is to replace the current third-party virtual cable captur
 
 ## Current state
 
-- compile status: blocked until a local official sample checkout and full WDK build prerequisites are present
+- compile status: compile-only build now succeeds under the VS18 / WDK 10.0.28000.0 toolchain
 - install status: never installed from this scaffold
 - load status: never loaded from this scaffold
 

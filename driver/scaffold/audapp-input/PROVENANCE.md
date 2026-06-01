@@ -38,9 +38,13 @@ SYSVAD reference files to inspect before deeper adaptation:
 
 ## Current state
 
-- No upstream Microsoft driver source has been vendored into this repo by default.
-- `prepare.ps1` is the approved import path when a local official checkout is available.
-- Any future imported files must be documented here with the exact upstream path and date.
+- Minimal compile-only scaffold sources are now intentionally vendored from the official sample set:
+  - `project/upstream-audiocodec/` from `audio/Acx/Samples/AudioCodec/Driver`
+  - `Common/` from `audio/Acx/Samples/Common`
+  - `inc/AudioFormats.h` and `inc/cpp_utils.h` from `audio/Acx/Samples/Inc`
+  - `shared/Public.h` and `shared/Trace.h` from `audio/Acx/Samples/Shared`
+- `prepare.ps1` remains the approved path to refresh the isolated upstream sample snapshot.
+- Build outputs under `Common/x64/` and `project/upstream-audiocodec/x64/` are not source and must stay untracked.
 
 ## License note
 
