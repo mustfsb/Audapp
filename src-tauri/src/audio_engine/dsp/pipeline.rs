@@ -5,6 +5,7 @@ use super::config::DspConfigShared;
 use super::eq::{peaking_eq_coeffs, EQ_FREQUENCIES, EQ_Q, NUM_EQ_BANDS};
 use super::filters::{default_q, highpass_coeffs, lowpass_coeffs};
 use super::gain::db_to_linear;
+use super::limiter::soft_limit;
 
 /// Snapshot of config values cached for a buffer cycle (read once per cycle, never per sample).
 struct DspSnapshot {
@@ -12,6 +13,7 @@ struct DspSnapshot {
     supported: bool,
     output_gain: f32,
     input_gain: f32,
+    limiter_enabled: bool,
     eq_enabled: bool,
 }
 
@@ -51,6 +53,7 @@ impl DspPipeline {
                 supported: false,
                 output_gain: 1.0,
                 input_gain: 1.0,
+                limiter_enabled: true,
                 eq_enabled: false,
             },
             out_hp: BiquadState::default(),
@@ -88,10 +91,9 @@ impl DspPipeline {
 
         let fmt_tag: u32 = if is_float { 1 } else if bits_per_sample == 16 { 2 } else { 3 };
         shared.sample_format_tag.store(fmt_tag, Ordering::Relaxed);
-        shared.supported.store(is_float, Ordering::Relaxed);
-        shared
-            .unsupported_reason_idx
-            .store(if is_float { 0 } else { 1 }, Ordering::Relaxed);
+        // DSP runs in f32; PCM int16 output is converted after processing.
+        shared.supported.store(true, Ordering::Relaxed);
+        shared.unsupported_reason_idx.store(0, Ordering::Relaxed);
         shared.active_in_engine.store(true, Ordering::Relaxed);
 
         // Force a refresh on the first buffer cycle
@@ -124,6 +126,7 @@ impl DspPipeline {
         let hp_hz = f32::from_bits(shared.high_pass_hz.load(Ordering::Relaxed));
         let lp_enabled = shared.low_pass_enabled.load(Ordering::Relaxed);
         let lp_hz = f32::from_bits(shared.low_pass_hz.load(Ordering::Relaxed));
+        let limiter_enabled = shared.limiter_enabled.load(Ordering::Relaxed);
         let eq_enabled = shared.eq_enabled.load(Ordering::Relaxed);
 
         self.snapshot = DspSnapshot {
@@ -131,6 +134,7 @@ impl DspPipeline {
             supported,
             output_gain: db_to_linear(out_gain_db),
             input_gain: db_to_linear(in_gain_db),
+            limiter_enabled,
             eq_enabled,
         };
 
@@ -183,7 +187,13 @@ impl DspPipeline {
                 y = self.out_eq_states[i].process(y, &c);
             }
         }
-        self.out_lp.process(y, &lp)
+        let y = self.out_lp.process(y, &lp);
+        // Final output stage: soft-clip limiter (enabled by default, prevents harsh clipping)
+        if self.snapshot.limiter_enabled {
+            soft_limit(y)
+        } else {
+            y
+        }
     }
 
     /// Process one capture sample for the given channel index.
@@ -209,5 +219,35 @@ impl DspPipeline {
             }
         }
         self.in_lp_states[ci].process(y, &lp)
+    }
+
+    /// Process one routing sample (capture → DSP → render path).
+    /// Full chain: input gain → HP → EQ → LP → limiter (per channel).
+    #[inline]
+    pub fn process_routing_sample(&mut self, x: f32, channel_index: usize) -> f32 {
+        if !self.snapshot.enabled || !self.snapshot.supported {
+            return x;
+        }
+        let ch_count = self.in_hp_states.len();
+        if ch_count == 0 {
+            return x;
+        }
+        let ci = channel_index % ch_count;
+        let y = x * self.snapshot.input_gain;
+        let hp = self.in_hp_coeffs;
+        let lp = self.in_lp_coeffs;
+        let mut y = self.in_hp_states[ci].process(y, &hp);
+        if self.snapshot.eq_enabled {
+            for i in 0..NUM_EQ_BANDS {
+                let c = self.in_eq_coeffs[i];
+                y = self.in_eq_states[ci][i].process(y, &c);
+            }
+        }
+        let y = self.in_lp_states[ci].process(y, &lp);
+        if self.snapshot.limiter_enabled {
+            soft_limit(y)
+        } else {
+            y
+        }
     }
 }

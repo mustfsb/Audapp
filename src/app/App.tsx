@@ -1,18 +1,17 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import {
-  eqPresetValues,
   mockChannels,
   mockEngineStatus,
-  mockHeadphoneEq,
-  mockMicrophoneEq,
   mockNoiseSuppression,
   mockProfiles,
   mockSettings,
 } from "@/data/mock-audio";
+import { AudioDspProvider } from "@/lib/use-audio-dsp";
 import { useAudioDiscovery } from "@/lib/use-audio-discovery";
 import { useAudioSessionControl } from "@/lib/use-audio-session-control";
 import { useChannelAssignments } from "@/lib/use-channel-assignments";
+import { useMixerChannelSettings } from "@/lib/use-mixer-channel-settings";
 import { invokeOrFallback } from "@/lib/tauri";
 import { applyTheme, getInitialTheme, type Theme } from "@/lib/theme";
 import type {
@@ -20,14 +19,13 @@ import type {
   AudioChannel,
   AudioProfile,
   EngineStatus,
-  EqBand,
-  EqPresetName,
   NoiseSuppressionState,
   SectionId,
 } from "@/types/audio";
 
 import { AppsView } from "@/components/apps/apps-view";
 import { EngineLabView } from "@/components/engine/engine-lab-view";
+import { RoutingLabView } from "@/components/routing/routing-lab-view";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { DevicesView } from "@/components/devices/devices-view";
 import { EqualizerView } from "@/components/eq/equalizer-view";
@@ -47,6 +45,7 @@ const navigation = [
   { id: "profiles", label: "Profiles", description: "" },
   { id: "settings", label: "Settings", description: "" },
   { id: "engine", label: "Engine Lab", description: "" },
+  { id: "routing", label: "Routing Lab", description: "" },
 ] as const satisfies ReadonlyArray<{
   id: SectionId;
   label: string;
@@ -63,9 +62,6 @@ export default function App() {
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(mockEngineStatus);
   const [channels, setChannels] = useState<AudioChannel[]>(mockChannels);
   const [profiles, setProfiles] = useState<AudioProfile[]>(mockProfiles);
-  const [headphoneBands, setHeadphoneBands] = useState<EqBand[]>(mockHeadphoneEq);
-  const [microphoneBands, setMicrophoneBands] = useState<EqBand[]>(mockMicrophoneEq);
-  const [eqPreset, setEqPreset] = useState<EqPresetName>("Flat");
   const [noiseSuppression, setNoiseSuppression] =
     useState<NoiseSuppressionState>(mockNoiseSuppression);
   const [settings, setSettings] = useState<AppSettings>(mockSettings);
@@ -78,6 +74,8 @@ export default function App() {
   } = useAudioDiscovery();
   const sessionControl = useAudioSessionControl(applySnapshot);
   const channelAssignments = useChannelAssignments();
+  const mixerChannelSettings = useMixerChannelSettings();
+  const mixerSettingsAppliedRef = useRef(false);
 
   useEffect(() => {
     void invokeOrFallback("get_app_version", "0.1.0").then(setAppVersion);
@@ -87,6 +85,24 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (mixerChannelSettings.isLoading || mixerSettingsAppliedRef.current) {
+      return;
+    }
+
+    if (mixerChannelSettings.settings.length === 0) {
+      mixerSettingsAppliedRef.current = true;
+      return;
+    }
+
+    setChannels((current) => mixerChannelSettings.applyToChannels(current));
+    mixerSettingsAppliedRef.current = true;
+  }, [
+    mixerChannelSettings.isLoading,
+    mixerChannelSettings.settings,
+    mixerChannelSettings.applyToChannels,
+  ]);
 
   const discoveryDevices = snapshot.devices;
   const discoverySessions = snapshot.sessions;
@@ -141,11 +157,17 @@ export default function App() {
 
   const handleMixerMuteToggle = useCallback(
     async (channelId: string, newMuted: boolean) => {
+      const currentChannel = channels.find((item) => item.id === channelId);
       updateChannel(channelId, (ch) => ({
         ...ch,
         muted: newMuted,
         peak: newMuted ? 0 : ch.volume,
       }));
+      void mixerChannelSettings.persistChannelSetting(
+        channelId,
+        currentChannel?.volume ?? 0,
+        newMuted,
+      );
 
       const sessions = discoverySessions.filter(
         (s) => channelAssignments.assignmentBySession(s)?.channelId === channelId,
@@ -179,7 +201,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [discoverySessions, channelAssignments, sessionControl],
+    [channels, discoverySessions, channelAssignments, sessionControl, mixerChannelSettings],
   );
 
   const handleMixerVolumeCommit = useCallback(
@@ -187,6 +209,13 @@ export default function App() {
       const sessions = discoverySessions.filter(
         (s) => channelAssignments.assignmentBySession(s)?.channelId === channelId,
       );
+      const channel = channels.find((item) => item.id === channelId);
+      void mixerChannelSettings.persistChannelSetting(
+        channelId,
+        volumePercent,
+        channel?.muted ?? false,
+      );
+
       if (sessions.length === 0) return;
 
       setChannelPending(channelId, true);
@@ -216,7 +245,7 @@ export default function App() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [discoverySessions, channelAssignments, sessionControl],
+    [discoverySessions, channelAssignments, sessionControl, channels, mixerChannelSettings],
   );
 
   const assignmentCountsByChannel = useMemo(() => {
@@ -234,23 +263,6 @@ export default function App() {
 
     return counts;
   }, [channels, discoverySessions, channelAssignments]);
-
-  function updateEqBands(
-    setter: React.Dispatch<React.SetStateAction<EqBand[]>>,
-    index: number,
-    gain: number,
-  ) {
-    setter((current) =>
-      current.map((band, bandIndex) => (bandIndex === index ? { ...band, gain } : band)),
-    );
-  }
-
-  function applyEqPreset(preset: EqPresetName) {
-    setEqPreset(preset);
-    setHeadphoneBands((current) =>
-      current.map((band, index) => ({ ...band, gain: eqPresetValues[preset][index] ?? band.gain })),
-    );
-  }
 
   function activateProfile(id: string) {
     setProfiles((current) =>
@@ -305,6 +317,8 @@ export default function App() {
         }
         channelErrors={channelErrors}
         channelIsPending={channelIsPending}
+        settingsError={mixerChannelSettings.error}
+        settingsWarning={mixerChannelSettings.loadWarning}
       />
     ),
     apps: (
@@ -342,17 +356,7 @@ export default function App() {
         onRefresh={() => void refreshDiscovery()}
       />
     ),
-    equalizer: (
-      <EqualizerView
-        preset={eqPreset}
-        presetOptions={Object.keys(eqPresetValues) as EqPresetName[]}
-        headphoneBands={headphoneBands}
-        microphoneBands={microphoneBands}
-        onPresetChange={applyEqPreset}
-        onHeadphoneBandChange={(index, value) => updateEqBands(setHeadphoneBands, index, value)}
-        onMicrophoneBandChange={(index, value) => updateEqBands(setMicrophoneBands, index, value)}
-      />
-    ),
+    equalizer: <EqualizerView />,
     noise: (
       <NoiseView
         enabled={noiseSuppression.enabled}
@@ -393,9 +397,16 @@ export default function App() {
         inputDevices={discoveryDevices.filter((d) => d.kind === "input")}
       />
     ),
+    routing: (
+      <RoutingLabView
+        outputDevices={outputDevices}
+        inputDevices={discoveryDevices.filter((d) => d.kind === "input")}
+      />
+    ),
   } satisfies Record<SectionId, ReactElement>;
 
   return (
+    <AudioDspProvider>
     <AppShell
       items={[...navigation]}
       activeSection={activeSection}
@@ -416,5 +427,6 @@ export default function App() {
     >
       {content[activeSection]}
     </AppShell>
+    </AudioDspProvider>
   );
 }

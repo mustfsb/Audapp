@@ -1,6 +1,6 @@
 import type { AudioChannel, AudioDevice } from "@/types/audio";
 
-import { ChannelStrip } from "./channel-strip";
+import { VerticalChannelStrip } from "./vertical-channel-strip";
 
 interface MixerViewProps {
   channels: AudioChannel[];
@@ -13,6 +13,8 @@ interface MixerViewProps {
   onOutputChange: (id: string, outputDeviceId: string) => void;
   channelErrors: Record<string, string>;
   channelIsPending: (id: string) => boolean;
+  settingsError?: string | null;
+  settingsWarning?: string | null;
 }
 
 export function MixerView(props: MixerViewProps) {
@@ -23,37 +25,32 @@ export function MixerView(props: MixerViewProps) {
         <p className="mt-0.5 text-sm text-muted-foreground">
           Local group controls — mute and volume apply to all sessions assigned to each channel. Audio is not routed.
         </p>
+        {props.settingsWarning && (
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">{props.settingsWarning}</p>
+        )}
+        {props.settingsError && (
+          <p className="mt-1 text-xs text-destructive">{props.settingsError}</p>
+        )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-        {props.channels.map((channel) => {
-          const count = props.assignmentCountsByChannel[channel.id] ?? 0;
-
-          return (
-            <div key={channel.id} className="space-y-1.5">
-              <div className="flex items-center justify-between px-0.5">
-                <span className="text-xs text-muted-foreground">
-                  {count === 0
-                    ? "No active sessions"
-                    : count === 1
-                      ? "1 active session"
-                      : `${count} active sessions`}
-                </span>
-              </div>
-              <ChannelStrip
-                channel={channel}
-                outputDevices={props.outputDevices}
-                onVolumeChange={props.onVolumeChange}
-                onVolumeCommit={props.onVolumeCommit}
-                onMuteToggle={props.onMuteToggle}
-                onSoloToggle={props.onSoloToggle}
-                onOutputChange={props.onOutputChange}
-                error={props.channelErrors[channel.id] ?? null}
-                isPending={props.channelIsPending(channel.id)}
-              />
-            </div>
-          );
-        })}
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-min items-stretch justify-start gap-3">
+          {props.channels.map((channel) => (
+            <VerticalChannelStrip
+              key={channel.id}
+              channelId={channel.id}
+              name={channel.name}
+              volumePercent={channel.volume}
+              muted={channel.muted}
+              activeSessionCount={props.assignmentCountsByChannel[channel.id] ?? 0}
+              onVolumeChange={(value) => props.onVolumeChange(channel.id, value)}
+              onVolumeCommit={(value) => props.onVolumeCommit(channel.id, value)}
+              onMuteToggle={() => props.onMuteToggle(channel.id, !channel.muted)}
+              error={props.channelErrors[channel.id] ?? null}
+              isPending={props.channelIsPending(channel.id)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

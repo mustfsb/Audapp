@@ -2,9 +2,9 @@ use tauri::Manager;
 
 use crate::audio_engine::{
     dsp_get_config, dsp_get_status, dsp_reset_config, dsp_set_config, dsp_set_eq_preset,
-    engine_start, engine_status, engine_stop, probe_device_formats,
-    AudioEngineRuntimeStatus, DeviceFormatInfo, DspRuntimeConfig, DspRuntimeStatus,
-    StartAudioEngineTestInput,
+    engine_start, engine_status, engine_stop, probe_device_formats, routing_start, routing_status,
+    routing_stop, AudioEngineRuntimeStatus, AudioRoutingRuntimeStatus, DeviceFormatInfo,
+    DspRuntimeConfig, DspRuntimeStatus, RoutingConfigInput, StartAudioEngineTestInput,
 };
 use crate::audio_engine::dsp::persistence as dsp_persistence;
 
@@ -56,6 +56,23 @@ pub fn reset_dsp_config(app: tauri::AppHandle) -> DspRuntimeConfig {
 #[tauri::command]
 pub fn get_dsp_status() -> DspRuntimeStatus {
     dsp_get_status()
+}
+
+#[tauri::command]
+pub fn start_audio_routing(
+    input: RoutingConfigInput,
+) -> Result<AudioRoutingRuntimeStatus, String> {
+    routing_start(input).map_err(|e| e.message())
+}
+
+#[tauri::command]
+pub fn stop_audio_routing() -> AudioRoutingRuntimeStatus {
+    routing_stop()
+}
+
+#[tauri::command]
+pub fn get_audio_routing_status() -> AudioRoutingRuntimeStatus {
+    routing_status()
 }
 
 #[tauri::command]

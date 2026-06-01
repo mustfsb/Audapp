@@ -34,7 +34,7 @@ export function NoiseView({
       </div>
 
       {/* Not-active callout */}
-      <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-4 py-3">
+      <div className="flex items-start gap-2.5 rounded-xl bg-muted/40 px-4 py-3">
         <Mic2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">Not implemented yet.</span>{" "}

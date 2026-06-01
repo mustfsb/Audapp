@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Theme } from "@/lib/theme";
 import type { AudioProfile, EngineStatus, SectionId } from "@/types/audio";
@@ -37,14 +39,40 @@ export function AppShell({
 }: AppShellProps) {
   const activeLabel = items.find((item) => item.id === activeSection)?.label ?? "Dashboard";
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("audapp-sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  function handleToggleCollapse() {
+    const next = !isSidebarCollapsed;
+    setIsSidebarCollapsed(next);
+    try {
+      localStorage.setItem("audapp-sidebar-collapsed", String(next));
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="grid min-h-screen lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div
+        className="grid min-h-screen"
+        style={{
+          gridTemplateColumns: isSidebarCollapsed ? "56px minmax(0, 1fr)" : "220px minmax(0, 1fr)",
+          transition: "grid-template-columns 180ms ease",
+        }}
+      >
         <Sidebar
           items={items}
           activeSection={activeSection}
           onSelect={onSelectSection}
           deviceCount={deviceCount}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleCollapse}
         />
         <div className="min-w-0">
           <Topbar

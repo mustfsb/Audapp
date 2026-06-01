@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Audapp",
-        "width": 1460,
-        "height": 920,
-        "minWidth": 1180,
-        "minHeight": 780,
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1100,
+        "minHeight": 700,
         "resizable": true
       }
     ],

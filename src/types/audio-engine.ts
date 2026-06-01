@@ -58,7 +58,9 @@ export type DspRuntimeConfig = {
   highPassHz: number;
   lowPassEnabled: boolean;
   lowPassHz: number;
+  limiterEnabled: boolean;
   eqEnabled: boolean;
+  eqPreset: string;
   eqBands: EqBandConfig[];
 };
 

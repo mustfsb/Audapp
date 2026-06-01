@@ -23,6 +23,13 @@ const SUBTYPE_IEEE_FLOAT: windows::core::GUID = windows::core::GUID::from_values
     [0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71],
 );
 
+/// Look up mix format for a device id from the last probe list.
+pub fn find_device_format(device_id: &str) -> Option<DeviceFormatInfo> {
+    probe_device_formats()
+        .into_iter()
+        .find(|d| d.device_id == device_id)
+}
+
 pub fn probe_device_formats() -> Vec<DeviceFormatInfo> {
     #[cfg(windows)]
     {

@@ -50,12 +50,12 @@ function DeviceGroup({
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <Icon className="size-3.5 text-muted-foreground" />
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+        <p className="text-xs font-medium text-muted-foreground">{title}</p>
       </div>
       {devices.length === 0 ? (
         <p className="px-1 text-sm text-muted-foreground">No {title.toLowerCase()} devices found.</p>
       ) : (
-        <div className="divide-y divide-border rounded-md border border-border">
+        <div className="divide-y divide-border/50 rounded-xl bg-card">
           {devices.map((device) => (
             <div key={device.id} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">

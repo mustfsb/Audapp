@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { RefreshCw, VolumeX, Volume2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -134,12 +133,14 @@ export function AppsView({
       )}
 
       {sessions.length === 0 ? (
-        <div className="rounded-md border border-border px-4 py-8 text-center">
+        <div className="rounded-xl bg-card px-4 py-8 text-center">
           <p className="text-sm font-medium text-muted-foreground">No active sessions</p>
-          <p className="mt-1 text-xs text-muted-foreground">Start audio playback in an application, then refresh.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Start audio playback in an application, then refresh.
+          </p>
         </div>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid gap-2 xl:grid-cols-2">
           {sessions.map((session) => {
             const channelId = channelIdForSession(session, defaultChannelId);
             const controllable = isSessionControllable(session);
@@ -148,68 +149,71 @@ export function AppsView({
             const disabled = !controllable || pending || isAssignmentsLoading;
 
             return (
-              <Card key={session.id}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-sm font-semibold leading-tight">
-                      {sessionDisplayLabel(session)}
-                    </CardTitle>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {session.muted && (
-                        <span className="text-xs text-muted-foreground">Muted</span>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        disabled={disabled}
-                        onClick={() => onMuteToggle(session, !session.muted)}
-                        title={session.muted ? "Unmute" : "Mute"}
-                      >
-                        {session.muted
-                          ? <VolumeX className="size-3.5 text-muted-foreground" />
-                          : <Volume2 className="size-3.5 text-muted-foreground" />
-                        }
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0">
-                  <SessionVolumeControl
-                    session={session}
-                    disabled={!controllable}
-                    isPending={pending}
-                    onVolumeCommit={onVolumeCommit}
-                  />
-
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-xs text-muted-foreground">Channel</span>
-                    <Select
-                      value={channelId}
-                      disabled={isAssignmentsLoading || pending}
-                      onValueChange={(value) => onChannelChange(session, value)}
+              <div
+                key={session.id}
+                className="rounded-xl bg-card px-4 py-3.5 space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium leading-tight">
+                    {sessionDisplayLabel(session)}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {session.muted && (
+                      <span className="text-xs text-muted-foreground">Muted</span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 text-muted-foreground"
+                      disabled={disabled}
+                      onClick={() => onMuteToggle(session, !session.muted)}
+                      title={session.muted ? "Unmute" : "Mute"}
                     >
-                      <SelectTrigger className="h-7 flex-1 text-xs">
-                        <SelectValue placeholder="Assign" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {channels.map((item) => (
-                          <SelectItem key={item.id} value={item.id} className="text-xs">
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {session.muted
+                        ? <VolumeX className="size-3.5" />
+                        : <Volume2 className="size-3.5" />
+                      }
+                    </Button>
                   </div>
+                </div>
 
-                  {!controllable && (
-                    <p className="text-xs text-muted-foreground">Controls unavailable for this session.</p>
-                  )}
-                  {inlineError && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">{inlineError}</p>
-                  )}
-                </CardContent>
-              </Card>
+                {/* Volume */}
+                <SessionVolumeControl
+                  session={session}
+                  disabled={!controllable}
+                  isPending={pending}
+                  onVolumeCommit={onVolumeCommit}
+                />
+
+                {/* Channel assignment */}
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs text-muted-foreground">Channel</span>
+                  <Select
+                    value={channelId}
+                    disabled={isAssignmentsLoading || pending}
+                    onValueChange={(value) => onChannelChange(session, value)}
+                  >
+                    <SelectTrigger className="h-7 flex-1 text-xs">
+                      <SelectValue placeholder="Assign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.map((item) => (
+                        <SelectItem key={item.id} value={item.id} className="text-xs">
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {!controllable && (
+                  <p className="text-xs text-muted-foreground">Controls unavailable for this session.</p>
+                )}
+                {inlineError && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">{inlineError}</p>
+                )}
+              </div>
             );
           })}
         </div>

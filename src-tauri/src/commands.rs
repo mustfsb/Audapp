@@ -1,8 +1,10 @@
 use crate::audio::{
-    self, load_assignments, remove_assignment,
+    self, load_assignments, load_mixer_channel_settings, remove_assignment,
+    reset_mixer_channel_settings as reset_persisted_mixer_settings,
     set_session_mute_with_snapshot, set_session_volume_with_snapshot, upsert_assignment,
-    AudioDiscoverySnapshot, AudioSessionControlResult, AudioSessionTarget,
-    ChannelAssignment, ChannelAssignmentMatch,
+    upsert_mixer_channel_setting, AudioDiscoverySnapshot,
+    AudioSessionControlResult, AudioSessionTarget, ChannelAssignment, ChannelAssignmentMatch,
+    MixerChannelSetting,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -45,6 +47,14 @@ pub struct SetChannelAssignmentInput {
 #[serde(rename_all = "camelCase")]
 pub struct RemoveChannelAssignmentInput {
     pub assignment_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetMixerChannelSettingInput {
+    pub channel_id: String,
+    pub volume_percent: f32,
+    pub muted: bool,
 }
 
 fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -115,5 +125,28 @@ pub fn remove_channel_assignment(
 ) -> Result<(), String> {
     let base_dir = app_data_dir(&app)?;
     remove_assignment(&base_dir, &input.assignment_id).map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn get_mixer_channel_settings(app: tauri::AppHandle) -> Result<Vec<MixerChannelSetting>, String> {
+    let base_dir = app_data_dir(&app)?;
+    Ok(load_mixer_channel_settings(&base_dir))
+}
+
+#[tauri::command]
+pub fn set_mixer_channel_setting(
+    app: tauri::AppHandle,
+    input: SetMixerChannelSettingInput,
+) -> Result<MixerChannelSetting, String> {
+    let base_dir = app_data_dir(&app)?;
+    let volume_percent = input.volume_percent.clamp(0.0, 100.0).round() as u8;
+    upsert_mixer_channel_setting(&base_dir, input.channel_id, volume_percent, input.muted)
+        .map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn reset_mixer_channel_settings(app: tauri::AppHandle) -> Result<(), String> {
+    let base_dir = app_data_dir(&app)?;
+    reset_persisted_mixer_settings(&base_dir).map_err(|error| error.message())
 }
 

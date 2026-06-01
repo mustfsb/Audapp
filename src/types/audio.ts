@@ -7,7 +7,8 @@ export type SectionId =
   | "noise"
   | "profiles"
   | "settings"
-  | "engine";
+  | "engine"
+  | "routing";
 
 export type LatencyMode = "Ultra Low" | "Balanced" | "Stable";
 export type DeviceKind = "input" | "output";

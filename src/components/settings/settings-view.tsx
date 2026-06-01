@@ -88,7 +88,7 @@ export function SettingsView({
               <InfoRow label="Engine state" value={engineStatus.state} />
               <InfoRow label="Version" value={appVersion} />
             </div>
-            <div className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2.5 text-sm">
+            <div className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2.5 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <ShieldCheck className="size-3.5" />
                 <span>Telemetry</span>

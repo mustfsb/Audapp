@@ -3,13 +3,18 @@ mod errors;
 mod format;
 mod manager;
 mod metrics;
+pub mod routing;
 mod tone;
 mod types;
 mod wasapi;
 
 pub use dsp::{get_config as dsp_get_config, get_status as dsp_get_status, reset_config as dsp_reset_config, set_config as dsp_set_config, set_eq_preset as dsp_set_eq_preset, DspRuntimeConfig, DspRuntimeStatus};
 pub use format::probe_device_formats;
-pub use manager::{engine_shutdown, engine_start, engine_status, engine_stop};
+pub use manager::{engine_is_active, engine_shutdown, engine_start, engine_status, engine_stop};
+pub use routing::{
+    routing_shutdown, routing_start, routing_status, routing_stop, AudioRoutingRuntimeStatus,
+    RoutingConfigInput,
+};
 pub use types::{AudioEngineRuntimeStatus, DeviceFormatInfo, StartAudioEngineTestInput};
 
 pub fn dsp_load_and_apply_persisted(data_dir: &std::path::Path) {

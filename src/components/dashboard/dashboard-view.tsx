@@ -60,7 +60,7 @@ export function DashboardView({
       </div>
 
       {/* Status rows */}
-      <div className="rounded-md border border-border divide-y divide-border">
+      <div className="rounded-xl bg-card divide-y divide-border/50">
         <StatusRow
           label="Discovery"
           value={discoveryStatusLabel(discoveryStatus)}
@@ -120,11 +120,11 @@ export function DashboardView({
       {/* Warnings */}
       {warnings.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Warnings</p>
+          <p className="text-xs font-medium text-muted-foreground">Warnings</p>
           {warnings.map((w) => (
             <div
               key={w}
-              className="flex items-start gap-2.5 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2.5"
+              className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5"
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
               <p className="text-sm text-foreground">{w}</p>
@@ -136,10 +136,10 @@ export function DashboardView({
       {/* Devices quick view */}
       {(outputDevice || inputDevice) && (
         <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Default endpoints</p>
+          <p className="text-xs font-medium text-muted-foreground">Default endpoints</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {outputDevice && (
-              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
                 <MonitorSpeaker className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{outputDevice.name}</p>
@@ -148,7 +148,7 @@ export function DashboardView({
               </div>
             )}
             {inputDevice && (
-              <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5">
                 <Mic2 className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{inputDevice.name}</p>
@@ -163,10 +163,10 @@ export function DashboardView({
       {/* Active sessions snapshot */}
       {sessions.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-medium text-muted-foreground">
             Active sessions ({sessions.length})
           </p>
-          <div className="divide-y divide-border rounded-md border border-border">
+          <div className="divide-y divide-border/50 rounded-xl bg-card">
             {sessions.slice(0, 6).map((session) => {
               const volume = sessionVolumePercent(session);
               return (

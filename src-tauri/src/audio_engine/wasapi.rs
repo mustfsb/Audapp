@@ -330,7 +330,8 @@ fn run_render_loop(
                         std::slice::from_raw_parts_mut(data_ptr as *mut i16, total)
                     };
                     for frame in 0..available as usize {
-                        let s = (tone.next_sample() * 32767.0) as i16;
+                        let sample_f = dsp_pipeline.process_render_mono(tone.next_sample());
+                        let s = (sample_f.clamp(-1.0, 1.0) * 32767.0) as i16;
                         for c in 0..ch {
                             slice[frame * ch + c] = s;
                         }

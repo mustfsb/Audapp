@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { invokeCommand } from "@/lib/tauri";
 import type { DspRuntimeConfig, DspRuntimeStatus } from "@/types/audio-engine";
@@ -11,7 +20,9 @@ const DEFAULT_DSP_CONFIG: DspRuntimeConfig = {
   highPassHz: 80,
   lowPassEnabled: false,
   lowPassHz: 18000,
+  limiterEnabled: true,
   eqEnabled: false,
+  eqPreset: "flat",
   eqBands: [
     { id: "band_100hz",   frequencyHz: 100,   gainDb: 0, enabled: true },
     { id: "band_250hz",   frequencyHz: 250,   gainDb: 0, enabled: true },
@@ -23,7 +34,34 @@ const DEFAULT_DSP_CONFIG: DspRuntimeConfig = {
 
 const THROTTLE_MS = 100;
 
-export function useAudioDsp() {
+type AudioDspValue = {
+  config: DspRuntimeConfig;
+  status: DspRuntimeStatus | null;
+  isLoading: boolean;
+  error: string | null;
+  setConfig: (newConfig: DspRuntimeConfig) => void;
+  commitConfig: (newConfig: DspRuntimeConfig) => Promise<void>;
+  reset: () => Promise<void>;
+  refreshStatus: () => Promise<void>;
+  setPreset: (preset: string) => Promise<void>;
+};
+
+const AudioDspContext = createContext<AudioDspValue | null>(null);
+
+export function AudioDspProvider({ children }: { children: ReactNode }) {
+  const value = useAudioDspState();
+  return createElement(AudioDspContext.Provider, { value }, children);
+}
+
+export function useAudioDsp(): AudioDspValue {
+  const ctx = useContext(AudioDspContext);
+  if (!ctx) {
+    throw new Error("useAudioDsp must be used within AudioDspProvider");
+  }
+  return ctx;
+}
+
+function useAudioDspState(): AudioDspValue {
   const [config, setConfigState] = useState<DspRuntimeConfig>(DEFAULT_DSP_CONFIG);
   const [status, setStatus] = useState<DspRuntimeStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -102,6 +140,25 @@ export function useAudioDsp() {
     }
   }, []);
 
+  const setPreset = useCallback(async (preset: string) => {
+    if (throttleRef.current !== null) {
+      clearTimeout(throttleRef.current);
+      throttleRef.current = null;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const s = await invokeCommand<DspRuntimeStatus>("set_dsp_eq_preset", { preset });
+      setStatus(s);
+      const cfg = await invokeCommand<DspRuntimeConfig>("get_dsp_config");
+      setConfigState(cfg);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return {
     config,
     status,
@@ -111,5 +168,6 @@ export function useAudioDsp() {
     commitConfig,
     reset,
     refreshStatus,
+    setPreset,
   };
 }

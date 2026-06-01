@@ -22,7 +22,7 @@ export function ProfilesView({ profiles, onActivate }: ProfilesViewProps) {
 
       <div className="grid gap-3 xl:grid-cols-2">
         {profiles.map((profile) => (
-          <Card key={profile.id} className={profile.active ? "border-foreground/25" : undefined}>
+          <Card key={profile.id} className={profile.active ? "border-foreground/20 ring-1 ring-foreground/10" : undefined}>
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-sm font-semibold">{profile.name}</CardTitle>

@@ -1,5 +1,6 @@
 mod assignments;
 mod controls;
+mod mixer_settings;
 mod devices;
 mod errors;
 #[cfg(windows)]
@@ -15,6 +16,10 @@ mod com;
 use types::AudioDiscoveryStatus;
 pub use assignments::{
     load_assignments, match_rule_from_session, remove_assignment, upsert_assignment,
+};
+pub use mixer_settings::{
+    load_mixer_channel_settings, reset_mixer_channel_settings, upsert_mixer_channel_setting,
+    MixerChannelSetting,
 };
 pub use controls::{set_session_mute_with_snapshot, set_session_volume_with_snapshot};
 pub use types::{

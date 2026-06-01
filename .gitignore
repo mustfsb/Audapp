@@ -7,18 +7,48 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# dependencies
+node_modules/
+
+# frontend build outputs
+dist/
+dist-ssr/
+.vite/
 *.local
+
+# Rust/Tauri build outputs
+target/
+src-tauri/target/
+
+# env/secrets
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# driver generated outputs
+driver/scaffold/audapp-input/project/
+driver/scaffold/audapp-input/**/*.binlog
+driver/scaffold/audapp-input/**/*.sys
+driver/scaffold/audapp-input/**/*.pdb
+driver/scaffold/audapp-input/**/*.obj
+driver/scaffold/audapp-input/**/*.lib
+driver/scaffold/audapp-input/**/*.exp
+driver/scaffold/audapp-input/**/*.cat
+driver/scaffold/audapp-input/**/*.cer
+driver/scaffold/audapp-input/**/*.inf
+driver/scaffold/audapp-input/**/x64/
+driver/scaffold/audapp-input/**/Debug/
+driver/scaffold/audapp-input/**/Release/

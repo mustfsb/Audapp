@@ -53,7 +53,7 @@ pub fn enumerate_sessions(
             }
         }
 
-        return Ok(sessions);
+        return Ok(collapse_system_sounds_sessions(sessions, devices));
     }
 
     #[cfg(not(windows))]
@@ -341,4 +341,169 @@ pub(super) fn resolve_session_display_name(
     }
 
     "Audio session".to_string()
+}
+
+/// Windows exposes a separate System Sounds session on each render endpoint.
+/// Keep a single row for the default output device (or best active fallback).
+pub fn collapse_system_sounds_sessions(
+    sessions: Vec<AudioDiscoverySession>,
+    devices: &[AudioDiscoveryDevice],
+) -> Vec<AudioDiscoverySession> {
+    let default_output_id = devices
+        .iter()
+        .find(|d| d.kind == "output" && d.is_default)
+        .map(|d| d.id.as_str());
+
+    let mut app_sessions = Vec::new();
+    let mut system_sessions = Vec::new();
+
+    for session in sessions {
+        if session.is_system_sounds {
+            system_sessions.push(session);
+        } else {
+            app_sessions.push(session);
+        }
+    }
+
+    if system_sessions.is_empty() {
+        return app_sessions;
+    }
+
+    if let Some(chosen) = pick_system_sounds_session(&system_sessions, default_output_id) {
+        app_sessions.push(chosen);
+    }
+
+    app_sessions
+}
+
+fn session_state_rank(state: &str) -> u8 {
+    match state {
+        "active" => 3,
+        "inactive" => 2,
+        "expired" => 1,
+        _ => 0,
+    }
+}
+
+fn pick_system_sounds_session<'a>(
+    sessions: &'a [AudioDiscoverySession],
+    default_output_device_id: Option<&str>,
+) -> Option<AudioDiscoverySession> {
+    let mut best: Option<&AudioDiscoverySession> = None;
+
+    let mut consider = |candidate: &'a AudioDiscoverySession| {
+        let prefer_default = default_output_device_id.is_some_and(|id| {
+            candidate.device_id.as_deref() == Some(id)
+        });
+        let replace = match best {
+            None => true,
+            Some(current) => {
+                let cand_default = default_output_device_id.is_some_and(|id| {
+                    current.device_id.as_deref() == Some(id)
+                });
+                if prefer_default && !cand_default {
+                    true
+                } else if cand_default && !prefer_default {
+                    false
+                } else {
+                    let cand_rank = session_state_rank(&candidate.state);
+                    let best_rank = session_state_rank(&current.state);
+                    cand_rank > best_rank
+                }
+            }
+        };
+        if replace {
+            best = Some(candidate);
+        }
+    };
+
+    if let Some(default_id) = default_output_device_id {
+        for session in sessions {
+            if session.device_id.as_deref() == Some(default_id) {
+                consider(session);
+            }
+        }
+    }
+
+    for session in sessions {
+        consider(session);
+    }
+
+    best.cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn system_session(id: &str, device_id: &str, state: &str) -> AudioDiscoverySession {
+        AudioDiscoverySession {
+            id: id.to_string(),
+            session_id: None,
+            session_instance_id: None,
+            display_name: "System Sounds".to_string(),
+            process_id: None,
+            process_name: Some("System Sounds".to_string()),
+            executable_path: None,
+            device_id: Some(device_id.to_string()),
+            state: state.to_string(),
+            volume: Some(100.0),
+            muted: Some(false),
+            is_system_sounds: true,
+        }
+    }
+
+    fn app_session(id: &str) -> AudioDiscoverySession {
+        AudioDiscoverySession {
+            id: id.to_string(),
+            session_id: Some("app-session".to_string()),
+            session_instance_id: None,
+            display_name: "Chrome".to_string(),
+            process_id: Some(1234),
+            process_name: Some("chrome.exe".to_string()),
+            executable_path: None,
+            device_id: Some("device-a".to_string()),
+            state: "active".to_string(),
+            volume: Some(80.0),
+            muted: Some(false),
+            is_system_sounds: false,
+        }
+    }
+
+    #[test]
+    fn collapse_system_sounds_keeps_one_row_and_preserves_apps() {
+        let devices = vec![
+            AudioDiscoveryDevice {
+                id: "default-out".to_string(),
+                name: "Speakers".to_string(),
+                kind: "output".to_string(),
+                state: "active".to_string(),
+                is_default: true,
+            },
+            AudioDiscoveryDevice {
+                id: "hdmi-out".to_string(),
+                name: "HDMI".to_string(),
+                kind: "output".to_string(),
+                state: "active".to_string(),
+                is_default: false,
+            },
+        ];
+
+        let sessions = vec![
+            app_session("chrome"),
+            system_session("sys-a", "hdmi-out", "inactive"),
+            system_session("sys-b", "default-out", "active"),
+            system_session("sys-c", "other-out", "active"),
+        ];
+
+        let collapsed = collapse_system_sounds_sessions(sessions, &devices);
+        assert_eq!(collapsed.len(), 2);
+        assert!(collapsed.iter().any(|s| s.id == "chrome"));
+        let system_rows: Vec<_> = collapsed
+            .iter()
+            .filter(|s| s.is_system_sounds)
+            .collect();
+        assert_eq!(system_rows.len(), 1);
+        assert_eq!(system_rows[0].id, "sys-b");
+    }
 }

@@ -21,7 +21,9 @@ pub struct DspRuntimeConfig {
     pub high_pass_hz: f32,
     pub low_pass_enabled: bool,
     pub low_pass_hz: f32,
+    pub limiter_enabled: bool,
     pub eq_enabled: bool,
+    pub eq_preset: String,
     pub eq_bands: Vec<EqBandConfig>,
 }
 
@@ -43,7 +45,9 @@ impl Default for DspRuntimeConfig {
             high_pass_hz: 80.0,
             low_pass_enabled: false,
             low_pass_hz: 18000.0,
+            limiter_enabled: true,
             eq_enabled: false,
+            eq_preset: "flat".to_string(),
             eq_bands,
         }
     }

@@ -17,7 +17,7 @@ export function SectionHeader({
     <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
       <div className="space-y-0.5">
         {eyebrow && (
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
+          <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p>
         )}
         <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
         {description && (

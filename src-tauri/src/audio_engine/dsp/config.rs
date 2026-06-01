@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 
 use super::eq::{clamp_eq_gain_db, NUM_EQ_BANDS};
 use super::gain::clamp_gain_db;
+use super::presets::{preset_band_gains, EqPreset};
 use super::types::{DspRuntimeConfig, DspRuntimeStatus, EqBandConfig};
 
 const HP_HZ_MIN: f32 = 20.0;
@@ -19,8 +20,10 @@ pub struct DspConfigShared {
     pub high_pass_hz: AtomicU32,
     pub low_pass_enabled: AtomicBool,
     pub low_pass_hz: AtomicU32,
+    pub limiter_enabled: AtomicBool,
     // EQ
     pub eq_enabled: AtomicBool,
+    pub eq_preset_idx: AtomicU32,   // 0=flat,1=gaming,2=music,3=voice_clarity,4=bass_boost,5=custom
     pub eq_band_gains: [AtomicU32; NUM_EQ_BANDS],    // f32 bits, -12..+12 dB
     pub eq_band_enabled: [AtomicBool; NUM_EQ_BANDS],
     pub version: AtomicU32, // bumped on every write; worker reads this for cache-invalidation
@@ -45,7 +48,9 @@ pub fn global() -> &'static DspConfigShared {
             high_pass_hz: AtomicU32::new(d.high_pass_hz.to_bits()),
             low_pass_enabled: AtomicBool::new(d.low_pass_enabled),
             low_pass_hz: AtomicU32::new(d.low_pass_hz.to_bits()),
+            limiter_enabled: AtomicBool::new(d.limiter_enabled),
             eq_enabled: AtomicBool::new(d.eq_enabled),
+            eq_preset_idx: AtomicU32::new(EqPreset::Flat.to_index()),
             eq_band_gains: [
                 AtomicU32::new(0_f32.to_bits()),
                 AtomicU32::new(0_f32.to_bits()),
@@ -88,15 +93,41 @@ fn clamp_config(c: DspRuntimeConfig) -> DspRuntimeConfig {
         high_pass_hz: c.high_pass_hz.clamp(HP_HZ_MIN, HP_HZ_MAX),
         low_pass_enabled: c.low_pass_enabled,
         low_pass_hz: c.low_pass_hz.clamp(LP_HZ_MIN, LP_HZ_MAX),
+        limiter_enabled: c.limiter_enabled,
         eq_enabled: c.eq_enabled,
+        eq_preset: c.eq_preset,
         eq_bands,
     }
+}
+
+/// Detect if the given band gains match a named preset exactly.
+/// Returns the matching preset or Custom.
+fn detect_preset(band_gains: &[f32]) -> EqPreset {
+    const NAMED: &[EqPreset] = &[
+        EqPreset::Flat,
+        EqPreset::Gaming,
+        EqPreset::Music,
+        EqPreset::VoiceClarity,
+        EqPreset::BassBoost,
+    ];
+    for &p in NAMED {
+        let expected = preset_band_gains(p);
+        let matches = band_gains.len() == NUM_EQ_BANDS
+            && band_gains
+                .iter()
+                .zip(expected.iter())
+                .all(|(a, b)| (a - b).abs() < 0.01);
+        if matches {
+            return p;
+        }
+    }
+    EqPreset::Custom
 }
 
 pub fn get_config() -> DspRuntimeConfig {
     use super::eq::EQ_FREQUENCIES;
     let g = global();
-    let eq_bands = (0..NUM_EQ_BANDS)
+    let eq_bands: Vec<EqBandConfig> = (0..NUM_EQ_BANDS)
         .map(|i| EqBandConfig {
             id: format!("band_{}hz", EQ_FREQUENCIES[i] as u32),
             frequency_hz: EQ_FREQUENCIES[i],
@@ -104,6 +135,7 @@ pub fn get_config() -> DspRuntimeConfig {
             enabled: g.eq_band_enabled[i].load(Ordering::Relaxed),
         })
         .collect();
+    let preset_idx = g.eq_preset_idx.load(Ordering::Relaxed);
     DspRuntimeConfig {
         enabled: g.enabled.load(Ordering::Relaxed),
         output_gain_db: f32::from_bits(g.output_gain_db.load(Ordering::Relaxed)),
@@ -112,7 +144,9 @@ pub fn get_config() -> DspRuntimeConfig {
         high_pass_hz: f32::from_bits(g.high_pass_hz.load(Ordering::Relaxed)),
         low_pass_enabled: g.low_pass_enabled.load(Ordering::Relaxed),
         low_pass_hz: f32::from_bits(g.low_pass_hz.load(Ordering::Relaxed)),
+        limiter_enabled: g.limiter_enabled.load(Ordering::Relaxed),
         eq_enabled: g.eq_enabled.load(Ordering::Relaxed),
+        eq_preset: EqPreset::from_index(preset_idx).as_str().to_string(),
         eq_bands,
     }
 }
@@ -127,11 +161,34 @@ pub fn set_config(config: DspRuntimeConfig) -> DspRuntimeStatus {
     g.high_pass_hz.store(c.high_pass_hz.to_bits(), Ordering::Relaxed);
     g.low_pass_enabled.store(c.low_pass_enabled, Ordering::Relaxed);
     g.low_pass_hz.store(c.low_pass_hz.to_bits(), Ordering::Relaxed);
+    g.limiter_enabled.store(c.limiter_enabled, Ordering::Relaxed);
     g.eq_enabled.store(c.eq_enabled, Ordering::Relaxed);
     for (i, band) in c.eq_bands.iter().enumerate().take(NUM_EQ_BANDS) {
         g.eq_band_gains[i].store(band.gain_db.to_bits(), Ordering::Relaxed);
         g.eq_band_enabled[i].store(band.enabled, Ordering::Relaxed);
     }
+    // Determine preset from the incoming band values (manual edits → Custom)
+    let band_gains: Vec<f32> = c.eq_bands.iter().map(|b| b.gain_db).collect();
+    let detected = detect_preset(&band_gains);
+    g.eq_preset_idx.store(detected.to_index(), Ordering::Relaxed);
+    g.version.fetch_add(1, Ordering::Relaxed);
+    get_status()
+}
+
+/// Apply a named preset: sets band gains, enables EQ, bumps version.
+pub fn set_eq_preset(name: &str) -> DspRuntimeStatus {
+    let preset = EqPreset::from_str(name);
+    let gains = preset_band_gains(preset);
+    let g = global();
+    for (i, &gain) in gains.iter().enumerate().take(NUM_EQ_BANDS) {
+        g.eq_band_gains[i].store(gain.to_bits(), Ordering::Relaxed);
+        g.eq_band_enabled[i].store(true, Ordering::Relaxed);
+    }
+    // Presets (except Custom) enable EQ automatically
+    if preset != EqPreset::Custom {
+        g.eq_enabled.store(true, Ordering::Relaxed);
+    }
+    g.eq_preset_idx.store(preset.to_index(), Ordering::Relaxed);
     g.version.fetch_add(1, Ordering::Relaxed);
     get_status()
 }
