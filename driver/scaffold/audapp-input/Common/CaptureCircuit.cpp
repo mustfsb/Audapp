@@ -399,6 +399,7 @@ Return Value:
     ACXPIN                          pin[CodecCapturePinCount];
 
     PAGED_CODE();
+    AUDAPP_TRACE_INFO("CodecC_CreateCaptureCircuit start");
 
     //
     // Init output value.
@@ -464,13 +465,23 @@ Return Value:
         //
         // The driver uses this DDI to register for a stream-create callback.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitInitAssignAcxCreateStreamCallback(circuitInit, CodecC_EvtCircuitCreateStream));
+        status = AcxCircuitInitAssignAcxCreateStreamCallback(circuitInit, CodecC_EvtCircuitCreateStream);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitInitAssignAcxCreateStreamCallback(capture) failed", status);
+            return status;
+        }
 
         //
         // The driver uses this DDI to create a new ACX circuit.
         //
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, CODEC_CAPTURE_CIRCUIT_CONTEXT);
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitCreate(Device, &attributes, &circuitInit, &circuit));
+        status = AcxCircuitCreate(Device, &attributes, &circuitInit, &circuit);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitCreate(capture) failed", status);
+            return status;
+        }
 
         circuitInitScope.release();
 
@@ -489,7 +500,12 @@ Return Value:
     {
         ACXELEMENT elements[CaptureElementCount] = { 0 };
 
-        RETURN_NTSTATUS_IF_FAILED(CodecC_CreateVolumeElement(circuit, (ACXVOLUME*)&elements[CaptureVolumeIndex]));
+        status = CodecC_CreateVolumeElement(circuit, (ACXVOLUME*)&elements[CaptureVolumeIndex]);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("CodecC_CreateVolumeElement failed", status);
+            return status;
+        }
 
         //
         // Saving the volume element in the circuit context.
@@ -499,7 +515,12 @@ Return Value:
         //
         // The driver uses this DDI post circuit creation to add ACXELEMENTs.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitAddElements(circuit, elements, SIZEOF_ARRAY(elements)));
+        status = AcxCircuitAddElements(circuit, elements, SIZEOF_ARRAY(elements));
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitAddElements(capture) failed", status);
+            return status;
+        }
     }
 
     ///////////////////////////////////////////////////////////
@@ -531,7 +552,12 @@ Return Value:
         //
         // The driver uses this DDI to create one or more pins on the circuits.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxPinCreate(circuit, &attributes, &pinCfg, &(pin[CodecCaptureHostPin])));
+        status = AcxPinCreate(circuit, &attributes, &pinCfg, &(pin[CodecCaptureHostPin]));
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinCreate(capture host) failed", status);
+            return status;
+        }
 
         ASSERT(pin[CodecCaptureHostPin] != nullptr);
         pinCtx = GetCodecPinContext(pin[CodecCaptureHostPin]);
@@ -567,7 +593,12 @@ Return Value:
         //
         // The driver uses this DDI to create one or more pins on the circuits.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxPinCreate(circuit, &attributes, &pinCfg, &(pin[CodecCaptureBridgePin])));
+        status = AcxPinCreate(circuit, &attributes, &pinCfg, &(pin[CodecCaptureBridgePin]));
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinCreate(capture bridge) failed", status);
+            return status;
+        }
 
         ASSERT(pin[CodecCaptureBridgePin] != nullptr);
     }
@@ -593,7 +624,12 @@ Return Value:
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, JACK_CONTEXT);
         attributes.ParentObject = pin[CodecCaptureBridgePin];
 
-        RETURN_NTSTATUS_IF_FAILED(AcxJackCreate(pin[CodecCaptureBridgePin], &attributes, &jackCfg, &jack));
+        status = AcxJackCreate(pin[CodecCaptureBridgePin], &attributes, &jackCfg, &jack);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxJackCreate(capture) failed", status);
+            return status;
+        }
 
         ASSERT(jack != nullptr);
 
@@ -601,16 +637,31 @@ Return Value:
         ASSERT(jackCtx);
         jackCtx->Dummy = 0;
 
-        RETURN_NTSTATUS_IF_FAILED(AcxPinAddJacks(pin[CodecCaptureBridgePin], &jack, 1));
+        status = AcxPinAddJacks(pin[CodecCaptureBridgePin], &jack, 1);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinAddJacks(capture) failed", status);
+            return status;
+        }
     }
 
-    RETURN_NTSTATUS_IF_FAILED(Capture_AllocateSupportedFormats(Device, pin, circuit, CodecCapturePinCount));
+    status = Capture_AllocateSupportedFormats(Device, pin, circuit, CodecCapturePinCount);
+    if (!NT_SUCCESS(status))
+    {
+        AUDAPP_TRACE_STATUS("Capture_AllocateSupportedFormats failed", status);
+        return status;
+    }
 
     ///////////////////////////////////////////////////////////
     //
     // The driver uses this DDI post circuit creation to add ACXPINs.
     //
-    RETURN_NTSTATUS_IF_FAILED(AcxCircuitAddPins(circuit, pin, CodecCapturePinCount));
+    status = AcxCircuitAddPins(circuit, pin, CodecCapturePinCount);
+    if (!NT_SUCCESS(status))
+    {
+        AUDAPP_TRACE_STATUS("AcxCircuitAddPins(capture) failed", status);
+        return status;
+    }
 
     //
     // Set output value.
@@ -621,6 +672,7 @@ Return Value:
     // Done. 
     //
     status = STATUS_SUCCESS;
+    AUDAPP_TRACE_INFO("CodecC_CreateCaptureCircuit completed successfully");
 
     return status;
 }

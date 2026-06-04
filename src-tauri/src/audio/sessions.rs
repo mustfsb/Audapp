@@ -160,8 +160,11 @@ fn read_session(
     let process_id = unsafe { control2.GetProcessId().unwrap_or(0) };
     let is_system_sounds = process_id == 0;
 
-    let (process_name, executable_path) = if is_system_sounds {
-        (Some("System Sounds".to_string()), None)
+    let process_metadata = if is_system_sounds {
+        super::process::ProcessMetadata {
+            process_name: Some("System Sounds".to_string()),
+            ..Default::default()
+        }
     } else {
         resolve_process_metadata(process_id)
     };
@@ -169,8 +172,8 @@ fn read_session(
     let raw_display = read_display_name(&control);
     let display_name = resolve_session_display_name(
         raw_display.as_deref(),
-        process_name.as_deref(),
-        executable_path.as_deref(),
+        process_metadata.process_name.as_deref(),
+        process_metadata.executable_path.as_deref(),
         process_id,
         is_system_sounds,
     );
@@ -180,6 +183,7 @@ fn read_session(
 
     let session_id = read_session_identifier(&control2);
     let session_instance_id = read_session_instance_id(&control2);
+    let grouping_param = read_grouping_param(&control);
     let composite_instance = session_instance_id.clone().unwrap_or_else(|| {
         format!("{device_id}-session-{index}")
     });
@@ -189,14 +193,18 @@ fn read_session(
         id,
         session_id,
         session_instance_id,
+        grouping_param,
         display_name,
         process_id: if is_system_sounds {
             None
         } else {
             Some(process_id)
         },
-        process_name,
-        executable_path,
+        process_name: process_metadata.process_name,
+        executable_path: process_metadata.executable_path,
+        app_user_model_id: process_metadata.app_user_model_id,
+        package_full_name: process_metadata.package_full_name,
+        package_family_name: process_metadata.package_family_name,
         device_id: Some(device_id.to_string()),
         state,
         volume,
@@ -236,6 +244,11 @@ fn read_session_instance_id(control2: &IAudioSessionControl2) -> Option<String> 
             .map(wide_ptr_to_string)
             .filter(|value| !value.is_empty())
     }
+}
+
+#[cfg(windows)]
+fn read_grouping_param(control: &IAudioSessionControl) -> Option<String> {
+    unsafe { control.GetGroupingParam().ok().map(|value| format!("{value:?}")) }
 }
 
 #[cfg(windows)]
@@ -441,10 +454,14 @@ mod tests {
             id: id.to_string(),
             session_id: None,
             session_instance_id: None,
+            grouping_param: None,
             display_name: "System Sounds".to_string(),
             process_id: None,
             process_name: Some("System Sounds".to_string()),
             executable_path: None,
+            app_user_model_id: None,
+            package_full_name: None,
+            package_family_name: None,
             device_id: Some(device_id.to_string()),
             state: state.to_string(),
             volume: Some(100.0),
@@ -458,10 +475,14 @@ mod tests {
             id: id.to_string(),
             session_id: Some("app-session".to_string()),
             session_instance_id: None,
+            grouping_param: None,
             display_name: "Chrome".to_string(),
             process_id: Some(1234),
             process_name: Some("chrome.exe".to_string()),
             executable_path: None,
+            app_user_model_id: None,
+            package_full_name: None,
+            package_family_name: None,
             device_id: Some("device-a".to_string()),
             state: "active".to_string(),
             volume: Some(80.0),

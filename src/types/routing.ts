@@ -1,18 +1,15 @@
-export type AudioRoutingState =
-  | "stopped"
-  | "starting"
-  | "running"
-  | "stopping"
-  | "error";
+// ---- Existing audio engine routing types ----
 
-export type RoutingConfigInput = {
+export type RoutingState = "stopped" | "starting" | "running" | "stopping" | "error";
+
+export interface RoutingConfigInput {
   captureDeviceId: string;
   renderDeviceId: string;
   requestedBufferMs?: number | null;
-};
+}
 
-export type AudioRoutingRuntimeStatus = {
-  state: AudioRoutingState;
+export interface AudioRoutingRuntimeStatus {
+  state: RoutingState;
   captureDeviceId: string | null;
   renderDeviceId: string | null;
   sampleRate: number | null;
@@ -29,4 +26,21 @@ export type AudioRoutingRuntimeStatus = {
   warning: string | null;
   lastError: string | null;
   updatedAt: string;
-};
+}
+
+// ---- Phase 17A: Audapp system routing status ----
+
+export interface RoutingStatus {
+  routingEnabled: boolean;
+  currentDefaultRenderId: string | null;
+  currentDefaultRenderName: string | null;
+  previousDefaultRenderId: string | null;
+  previousDefaultRenderName: string | null;
+  audappRenderId: string | null;
+  audappRenderName: string | null;
+  selectedOutputId: string | null;
+  selectedOutputName: string | null;
+  bridgeRunning: boolean;
+  restoreAvailable: boolean;
+  lastError: string | null;
+}

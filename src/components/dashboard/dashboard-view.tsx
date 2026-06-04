@@ -1,6 +1,5 @@
 import {
   Gamepad2,
-  Globe,
   MessageCircle,
   Mic2,
   MonitorSpeaker,
@@ -17,12 +16,10 @@ import { mockSessions } from "@/data/mock-audio";
 import type { AudioChannel, AudioDevice } from "@/types/audio";
 
 const channelIcons: Record<string, React.ElementType> = {
-  system: Volume2,
+  general: Volume2,
   game: Gamepad2,
-  chat: MessageCircle,
-  browser: Globe,
+  voice: MessageCircle,
   music: Music,
-  mic: Mic2,
 };
 
 interface DashboardViewProps {

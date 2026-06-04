@@ -38,6 +38,9 @@ Thumbs.db
 *.sln
 *.sw?
 
+# PowerShell transcript logs
+$logPath
+
 # driver generated outputs
 driver/scaffold/audapp-input/project/
 driver/scaffold/audapp-input/**/*.binlog

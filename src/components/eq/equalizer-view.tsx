@@ -11,7 +11,7 @@ export function EqualizerView() {
       <div>
         <h1 className="text-xl font-semibold">Equalizer</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Shared DSP config for Engine Lab and Routing Lab (not system-wide audio).
+          Master DSP applied to the Audapp bridge output stream.
         </p>
       </div>
 
@@ -19,15 +19,18 @@ export function EqualizerView() {
         <FlaskConical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="space-y-1 text-sm text-muted-foreground">
           <p>
-            <span className="font-medium text-foreground">Not system-wide EQ.</span> Changes apply
-            to Engine Lab test streams and to Routing Lab when manual routing is running.
+            <span className="font-medium text-foreground">Master bridge output DSP.</span> When
+            Audapp Routing is active, all DSP controls here (gain, EQ, limiter) are applied to
+            the mixed output stream before it reaches your physical speakers.
           </p>
-          <p>Automatic per-app routing is not available yet.</p>
-          <p>Noise suppression is not active yet.</p>
-          <p className="pt-1">
-            Use <span className="font-medium text-foreground">Routing Lab</span> with a virtual cable,
-            or <span className="font-medium text-foreground">Render Test Tone</span> in Engine Lab,
-            to hear EQ changes.
+          <p>
+            <span className="font-medium text-foreground">Channel gain/mute</span> uses Windows
+            session volume controls (see Mixer page).
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Per-channel EQ</span> is not available
+            yet — audio is already mixed by the time Audapp captures it. Separated streams are
+            required for true per-channel EQ and are a future phase.
           </p>
         </div>
       </div>
@@ -35,7 +38,7 @@ export function EqualizerView() {
       <DspControls
         dsp={dsp}
         showInputGain={false}
-        footerNote="Changes apply to the shared DSP config used by Engine Lab and Routing Lab. This does not affect other apps unless you route audio into Routing Lab manually."
+        footerNote="DSP is applied to the mixed Audapp bridge output. Master gain and EQ affect all audio passing through the Audapp routing path. Enable DSP and start Audapp Routing in Bridge Lab to hear changes."
       />
     </div>
   );

@@ -1,10 +1,12 @@
 use crate::audio::{
-    self, load_assignments, load_mixer_channel_settings, remove_assignment,
-    reset_mixer_channel_settings as reset_persisted_mixer_settings,
+    self, clear_route_intent_for_target, load_assignments, load_mixer_channel_settings,
+    load_session_route_intents, remove_assignment,
+    reset_mixer_channel_settings as reset_persisted_mixer_settings, set_route_intent_for_target,
     set_session_mute_with_snapshot, set_session_volume_with_snapshot, upsert_assignment,
-    upsert_mixer_channel_setting, AudioDiscoverySnapshot,
+    upsert_mixer_channel_setting, AudioDiscoverySnapshot, AudioEndpointDiagnostic,
     AudioSessionControlResult, AudioSessionTarget, ChannelAssignment, ChannelAssignmentMatch,
-    MixerChannelSetting,
+    EndpointProbeResult, MixerChannelSetting, SessionRouteCapability, SessionRouteIntent,
+    SessionRouteIntentEntry,
 };
 use serde::Deserialize;
 use serde::Serialize;
@@ -57,6 +59,19 @@ pub struct SetMixerChannelSettingInput {
     pub muted: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetSessionRouteIntentInput {
+    pub target: AudioSessionTarget,
+    pub intent: SessionRouteIntent,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearSessionRouteIntentInput {
+    pub target: AudioSessionTarget,
+}
+
 fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
         .app_local_data_dir()
@@ -98,6 +113,38 @@ pub fn set_audio_session_mute(input: SetAudioSessionMuteInput) -> AudioSessionCo
 }
 
 #[tauri::command]
+pub fn get_session_route_intents(
+    app: tauri::AppHandle,
+) -> Result<Vec<SessionRouteIntentEntry>, String> {
+    let base_dir = app_data_dir(&app)?;
+    load_session_route_intents(&base_dir).map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn set_session_route_intent(
+    app: tauri::AppHandle,
+    input: SetSessionRouteIntentInput,
+) -> Result<SessionRouteIntentEntry, String> {
+    let base_dir = app_data_dir(&app)?;
+    set_route_intent_for_target(&base_dir, &input.target, input.intent)
+        .map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn clear_session_route_intent(
+    app: tauri::AppHandle,
+    input: ClearSessionRouteIntentInput,
+) -> Result<(), String> {
+    let base_dir = app_data_dir(&app)?;
+    clear_route_intent_for_target(&base_dir, &input.target).map_err(|error| error.message())
+}
+
+#[tauri::command]
+pub fn get_session_route_capability() -> SessionRouteCapability {
+    audio::get_session_route_capability()
+}
+
+#[tauri::command]
 pub fn get_channel_assignments(app: tauri::AppHandle) -> Result<Vec<ChannelAssignment>, String> {
     let base_dir = app_data_dir(&app)?;
     load_assignments(&base_dir).map_err(|error| error.message())
@@ -109,13 +156,8 @@ pub fn set_channel_assignment(
     input: SetChannelAssignmentInput,
 ) -> Result<ChannelAssignment, String> {
     let base_dir = app_data_dir(&app)?;
-    upsert_assignment(
-        &base_dir,
-        input.channel_id,
-        input.match_rule,
-        input.label,
-    )
-    .map_err(|error| error.message())
+    upsert_assignment(&base_dir, input.channel_id, input.match_rule, input.label)
+        .map_err(|error| error.message())
 }
 
 #[tauri::command]
@@ -128,7 +170,9 @@ pub fn remove_channel_assignment(
 }
 
 #[tauri::command]
-pub fn get_mixer_channel_settings(app: tauri::AppHandle) -> Result<Vec<MixerChannelSetting>, String> {
+pub fn get_mixer_channel_settings(
+    app: tauri::AppHandle,
+) -> Result<Vec<MixerChannelSetting>, String> {
     let base_dir = app_data_dir(&app)?;
     Ok(load_mixer_channel_settings(&base_dir))
 }
@@ -150,3 +194,12 @@ pub fn reset_mixer_channel_settings(app: tauri::AppHandle) -> Result<(), String>
     reset_persisted_mixer_settings(&base_dir).map_err(|error| error.message())
 }
 
+#[tauri::command]
+pub fn get_audio_endpoint_diagnostics() -> Result<Vec<AudioEndpointDiagnostic>, String> {
+    audio::enumerate_endpoint_diagnostics()
+}
+
+#[tauri::command]
+pub fn probe_audio_endpoint(endpoint_id: String) -> EndpointProbeResult {
+    audio::probe_endpoint(endpoint_id)
+}

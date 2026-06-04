@@ -12,6 +12,7 @@ import {
   Waves,
   Route,
   Workflow,
+  Cable,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ const icons: Record<SectionId, React.ElementType> = {
   settings: Settings2,
   engine: FlaskConical,
   routing: Route,
+  bridge: Cable,
 };
 
 interface SidebarProps {

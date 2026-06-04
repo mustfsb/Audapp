@@ -15,6 +15,12 @@ impl AudioDiscoveryError {
         }
     }
 
+    pub fn message_only(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            code: None,
+        }
+    }
 }
 
 impl std::fmt::Display for AudioDiscoveryError {

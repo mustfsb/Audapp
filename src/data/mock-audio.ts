@@ -9,6 +9,7 @@ import type {
   EqPresetName,
   NoiseSuppressionState,
 } from "@/types/audio";
+import { createInternalAudioChannels } from "@/lib/internal-channels";
 
 const bandLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
 
@@ -91,20 +92,13 @@ export const mockDevices: AudioDevice[] = [
   },
 ];
 
-export const mockChannels: AudioChannel[] = [
-  { id: "system", name: "System", bucket: "system", volume: 72, muted: false, solo: false, outputDeviceId: "out-1", peak: 58, meterHold: 64 },
-  { id: "game", name: "Game", bucket: "entertainment", volume: 80, muted: false, solo: false, outputDeviceId: "out-1", peak: 77, meterHold: 83 },
-  { id: "chat", name: "Chat", bucket: "voice", volume: 68, muted: false, solo: false, outputDeviceId: "out-2", peak: 49, meterHold: 55 },
-  { id: "browser", name: "Browser", bucket: "system", volume: 64, muted: false, solo: false, outputDeviceId: "out-1", peak: 44, meterHold: 50 },
-  { id: "music", name: "Music", bucket: "entertainment", volume: 74, muted: false, solo: false, outputDeviceId: "out-3", peak: 66, meterHold: 71 },
-  { id: "mic", name: "Mic", bucket: "capture", volume: 61, muted: false, solo: false, outputDeviceId: "out-1", peak: 35, meterHold: 42 },
-];
+export const mockChannels: AudioChannel[] = createInternalAudioChannels("out-1");
 
 export const mockSessions: AppAudioSession[] = [
-  { id: "chrome", name: "Chrome", process: "chrome.exe", channelId: "browser", volume: 62, outputDeviceId: "out-1", state: "Foreground" },
-  { id: "discord", name: "Discord", process: "discord.exe", channelId: "chat", volume: 70, outputDeviceId: "out-2", state: "Foreground" },
+  { id: "chrome", name: "Chrome", process: "chrome.exe", channelId: "general", volume: 62, outputDeviceId: "out-1", state: "Foreground" },
+  { id: "discord", name: "Discord", process: "discord.exe", channelId: "voice", volume: 70, outputDeviceId: "out-2", state: "Foreground" },
   { id: "spotify", name: "Spotify", process: "spotify.exe", channelId: "music", volume: 74, outputDeviceId: "out-3", state: "Background" },
-  { id: "steam", name: "Steam", process: "steam.exe", channelId: "system", volume: 38, outputDeviceId: "out-1", state: "Idle" },
+  { id: "steam", name: "Steam", process: "steam.exe", channelId: "general", volume: 38, outputDeviceId: "out-1", state: "Idle" },
   { id: "game", name: "GameClient.exe", process: "gameclient.exe", channelId: "game", volume: 81, outputDeviceId: "out-1", state: "Foreground" },
 ];
 

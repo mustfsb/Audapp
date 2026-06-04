@@ -1,10 +1,13 @@
 mod assignments;
 mod controls;
-mod mixer_settings;
 mod devices;
+mod diagnostics;
 mod errors;
+mod mixer_settings;
 #[cfg(windows)]
 mod process;
+mod route_support;
+mod session_intents;
 #[cfg(windows)]
 mod sessions;
 mod targeting;
@@ -13,15 +16,24 @@ mod types;
 #[cfg(windows)]
 mod com;
 
-use types::AudioDiscoveryStatus;
 pub use assignments::{
     load_assignments, match_rule_from_session, remove_assignment, upsert_assignment,
+};
+pub use controls::{set_session_mute_with_snapshot, set_session_volume_with_snapshot};
+pub use diagnostics::{
+    enumerate_endpoint_diagnostics, probe_endpoint, AudioEndpointDiagnostic, EndpointProbeResult,
 };
 pub use mixer_settings::{
     load_mixer_channel_settings, reset_mixer_channel_settings, upsert_mixer_channel_setting,
     MixerChannelSetting,
 };
-pub use controls::{set_session_mute_with_snapshot, set_session_volume_with_snapshot};
+pub use route_support::{get_session_route_capability, SessionRouteCapability};
+pub use session_intents::{
+    clear_route_intent_for_target, get_route_intent_for_target, load_session_route_intents,
+    route_intent_key_from_target, set_route_intent_for_target, SessionRouteIntent,
+    SessionRouteIntentEntry,
+};
+use types::AudioDiscoveryStatus;
 pub use types::{
     AudioDiscoverySession, AudioDiscoverySnapshot, AudioSessionControlResult, AudioSessionTarget,
     ChannelAssignment, ChannelAssignmentMatch,

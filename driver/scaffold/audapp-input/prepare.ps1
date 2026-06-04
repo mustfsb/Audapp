@@ -60,4 +60,7 @@ $report = @(
 ) + ($requiredFiles | ForEach-Object { "- $_" })
 
 Set-Content -LiteralPath $reportPath -Value $report -Encoding ascii
+
+& (Join-Path $scriptRoot "Apply-PackageIdentity.ps1")
+
 Write-Output "Prepared compile-only sample snapshot at $targetRoot"

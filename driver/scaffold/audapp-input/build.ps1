@@ -81,6 +81,13 @@ if (-not (Test-Path -LiteralPath $solutionPath)) {
     Fail "Prepared sample files were not found. Run prepare.ps1 with -SampleRoot first."
 }
 
+$applyIdentityScript = Join-Path $scriptRoot "Apply-PackageIdentity.ps1"
+if (-not (Test-Path -LiteralPath $applyIdentityScript)) {
+    Fail "Apply-PackageIdentity.ps1 was not found at $applyIdentityScript"
+}
+
+& $applyIdentityScript
+
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\Installer\\vswhere.exe"
 if (-not (Test-Path -LiteralPath $vswhere)) {
     Fail "vswhere.exe was not found. Visual Studio detection cannot continue."
@@ -134,4 +141,40 @@ if ($LASTEXITCODE -ne 0) {
     Fail "msbuild failed with exit code $LASTEXITCODE"
 }
 
+$buildOutputDir = Join-Path $targetRoot "$Platform\$Configuration"
+$sysPath = Join-Path $buildOutputDir "AudioCodec.sys"
+$infPath = Join-Path $buildOutputDir "AudioCodec.inf"
+
+if (-not (Test-Path -LiteralPath $sysPath)) {
+    Fail "Expected driver binary was not found at $sysPath"
+}
+
+if (-not (Test-Path -LiteralPath $infPath)) {
+    Fail "Expected stamped INF was not found at $infPath"
+}
+
+$stageDir = Join-Path $scriptRoot "package\$Configuration\$Platform"
+New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+
+Copy-Item -LiteralPath $sysPath -Destination (Join-Path $stageDir "AudioCodec.sys") -Force
+Copy-Item -LiteralPath $infPath -Destination (Join-Path $stageDir "AudioCodec.inf") -Force
+
+$manifestPath = Join-Path $stageDir "package-manifest.txt"
+$manifest = @(
+    "Audapp Input driver package (compile-only stage)",
+    "Timestamp: $(Get-Date -Format o)",
+    "Configuration: $Configuration",
+    "Platform: $Platform",
+    "SourceBuildOutput: $buildOutputDir",
+    "PackageDisplayName: Audapp Input",
+    "HardwareId: ROOT\AudappInput",
+    "Artifacts:",
+    "- AudioCodec.sys",
+    "- AudioCodec.inf",
+    "Catalog:",
+    "- Run Generate-Catalog.ps1 to produce AudioCodec.cat (unsigned)"
+)
+Set-Content -LiteralPath $manifestPath -Value $manifest -Encoding ascii
+
 Write-Output "Compile-only build succeeded. Binlog: $binlogPath"
+Write-Output "Staged package: $stageDir"

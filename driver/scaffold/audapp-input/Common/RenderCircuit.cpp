@@ -269,6 +269,7 @@ Return Value:
     WDF_OBJECT_ATTRIBUTES           attributes;
 
     PAGED_CODE();
+    AUDAPP_TRACE_INFO("CodecR_CreateRenderCircuit start");
 
     devCtx = GetCodecDeviceContext(Device);
     ASSERT(devCtx != nullptr);
@@ -433,13 +434,23 @@ Return Value:
         //
         // The driver uses this DDI to register for a stream-create callback.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitInitAssignAcxCreateStreamCallback(circuitInit, CodecR_EvtCircuitCreateStream));
+        status = AcxCircuitInitAssignAcxCreateStreamCallback(circuitInit, CodecR_EvtCircuitCreateStream);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitInitAssignAcxCreateStreamCallback(render) failed", status);
+            return status;
+        }
 
         //
         // The driver uses this DDI to create a new ACX circuit.
         //
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, CODEC_RENDER_CIRCUIT_CONTEXT);
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitCreate(Device, &attributes, &circuitInit, &circuit));
+        status = AcxCircuitCreate(Device, &attributes, &circuitInit, &circuit);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitCreate(render) failed", status);
+            return status;
+        }
 
         circuitInitScope.release();
 
@@ -481,7 +492,12 @@ Return Value:
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, VOLUME_ELEMENT_CONTEXT);
         attributes.ParentObject = circuit;
 
-        RETURN_NTSTATUS_IF_FAILED(AcxVolumeCreate(circuit, &attributes, &volumeCfg, (ACXVOLUME*)&elements[RenderVolumeIndex]));
+        status = AcxVolumeCreate(circuit, &attributes, &volumeCfg, (ACXVOLUME*)&elements[RenderVolumeIndex]);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxVolumeCreate(render) failed", status);
+            return status;
+        }
 
         //
         // The driver uses this DDI to assign its mute element callbacks.
@@ -503,7 +519,12 @@ Return Value:
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, MUTE_ELEMENT_CONTEXT);
         attributes.ParentObject = circuit;
 
-        RETURN_NTSTATUS_IF_FAILED(AcxMuteCreate(circuit, &attributes, &muteCfg, (ACXMUTE*)&elements[RenderMuteIndex]));
+        status = AcxMuteCreate(circuit, &attributes, &muteCfg, (ACXMUTE*)&elements[RenderMuteIndex]);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxMuteCreate(render) failed", status);
+            return status;
+        }
 
         //
         // Saving the volume and mute elements in the circuit context.
@@ -514,7 +535,12 @@ Return Value:
         //
         // The driver uses this DDI post circuit creation to add ACXELEMENTs.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxCircuitAddElements(circuit, elements, SIZEOF_ARRAY(elements)));
+        status = AcxCircuitAddElements(circuit, elements, SIZEOF_ARRAY(elements));
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxCircuitAddElements(render) failed", status);
+            return status;
+        }
     } 
 
     ///////////////////////////////////////////////////////////
@@ -547,7 +573,12 @@ Return Value:
         //
         // The driver uses this DDI to create one or more pins on the circuits.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxPinCreate(circuit, &attributes, &pinCfg, &pin[CodecRenderHostPin]));
+        status = AcxPinCreate(circuit, &attributes, &pinCfg, &pin[CodecRenderHostPin]);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinCreate(render host) failed", status);
+            return status;
+        }
 
         ASSERT(pin[CodecRenderHostPin] != nullptr);
         pinCtx = GetCodecPinContext(pin[CodecRenderHostPin]);
@@ -571,7 +602,12 @@ Return Value:
         //
         // The driver uses this DDI to create one or more pins on the circuits.
         //
-        RETURN_NTSTATUS_IF_FAILED(AcxPinCreate(circuit, &attributes, &pinCfg, &pin[CodecRenderBridgePin]));
+        status = AcxPinCreate(circuit, &attributes, &pinCfg, &pin[CodecRenderBridgePin]);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinCreate(render bridge) failed", status);
+            return status;
+        }
 
         ASSERT(pin[CodecRenderBridgePin] != nullptr);
         pinCtx = GetCodecPinContext(pin[CodecRenderBridgePin]);
@@ -600,7 +636,12 @@ Return Value:
         WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, JACK_CONTEXT);
         attributes.ParentObject = pin[CodecRenderBridgePin];
 
-        RETURN_NTSTATUS_IF_FAILED(AcxJackCreate(pin[CodecRenderBridgePin], &attributes, &jackCfg, &jack));
+        status = AcxJackCreate(pin[CodecRenderBridgePin], &attributes, &jackCfg, &jack);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxJackCreate(render) failed", status);
+            return status;
+        }
 
         ASSERT(jack != nullptr);
 
@@ -608,16 +649,31 @@ Return Value:
         ASSERT(jackCtx);
         jackCtx->Dummy = 0;
 
-        RETURN_NTSTATUS_IF_FAILED(AcxPinAddJacks(pin[CodecRenderBridgePin], &jack, 1));
+        status = AcxPinAddJacks(pin[CodecRenderBridgePin], &jack, 1);
+        if (!NT_SUCCESS(status))
+        {
+            AUDAPP_TRACE_STATUS("AcxPinAddJacks(render) failed", status);
+            return status;
+        }
     }
 
-    RETURN_NTSTATUS_IF_FAILED(Render_AllocateSupportedFormats(Device, pin, circuit, CodecRenderPinCount));
+    status = Render_AllocateSupportedFormats(Device, pin, circuit, CodecRenderPinCount);
+    if (!NT_SUCCESS(status))
+    {
+        AUDAPP_TRACE_STATUS("Render_AllocateSupportedFormats failed", status);
+        return status;
+    }
 
     ///////////////////////////////////////////////////////////
     //
     // The driver uses this DDI post circuit creation to add ACXPINs.
     //
-    RETURN_NTSTATUS_IF_FAILED(AcxCircuitAddPins(circuit, pin, CodecRenderPinCount));
+    status = AcxCircuitAddPins(circuit, pin, CodecRenderPinCount);
+    if (!NT_SUCCESS(status))
+    {
+        AUDAPP_TRACE_STATUS("AcxCircuitAddPins(render) failed", status);
+        return status;
+    }
 
     //
     // Set output value.
@@ -628,6 +684,7 @@ Return Value:
     // Done. 
     //
     status = STATUS_SUCCESS;
+    AUDAPP_TRACE_INFO("CodecR_CreateRenderCircuit completed successfully");
 
     return status;
 }

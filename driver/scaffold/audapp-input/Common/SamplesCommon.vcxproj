@@ -98,8 +98,8 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace_macros.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.1;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=1;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.0;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=0;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
@@ -111,8 +111,8 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace_macros.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.1;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=1;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.0;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=0;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
@@ -124,8 +124,8 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace_macros.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.1;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=1;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.0;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=0;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
@@ -137,8 +137,8 @@
       <WppRecorderEnabled>true</WppRecorderEnabled>
       <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace_macros.h</WppScanConfigurationData>
       <WppKernelMode>true</WppKernelMode>
-      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.1;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=1;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SDK_INC_PATH);$(DDK_INC_PATH)\acx\km\1.0;..\inc;..\shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ACX_VERSION_MAJOR=1;ACX_VERSION_MINOR=0;KMDF_VERSION_MAJOR=1;KMDF_VERSION_MINOR=31;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>

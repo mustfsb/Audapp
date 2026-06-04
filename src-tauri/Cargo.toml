@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Audapp desktop foundation"
 authors = ["Audapp"]
 edition = "2021"
+default-run = "audapp"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +14,10 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "audapp_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "audapp_endpoint_probe"
+path = "src/bin/audapp_endpoint_probe.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -31,9 +36,9 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Devices_Properties",
+    "Win32_Storage_Packaging_Appx",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Threading",
     "Win32_UI_Shell_PropertiesSystem",
 ] }
-

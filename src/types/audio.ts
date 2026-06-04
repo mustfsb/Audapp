@@ -8,7 +8,8 @@ export type SectionId =
   | "profiles"
   | "settings"
   | "engine"
-  | "routing";
+  | "routing"
+  | "bridge";
 
 export type LatencyMode = "Ultra Low" | "Balanced" | "Stable";
 export type DeviceKind = "input" | "output";
@@ -37,7 +38,8 @@ export interface AudioDevice {
 export interface AudioChannel {
   id: string;
   name: string;
-  bucket: "system" | "entertainment" | "voice" | "capture";
+  description?: string;
+  bucket: "general" | "music" | "voice" | "game";
   volume: number;
   muted: boolean;
   solo: boolean;

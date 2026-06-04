@@ -29,10 +29,14 @@ export type AudioDiscoverySession = {
   id: string;
   sessionId: string | null;
   sessionInstanceId: string | null;
+  groupingParam?: string | null;
   displayName: string;
   processId: number | null;
   processName: string | null;
   executablePath: string | null;
+  appUserModelId?: string | null;
+  packageFullName?: string | null;
+  packageFamilyName?: string | null;
   deviceId: string | null;
   state: AudioDiscoverySessionState;
   volume: number | null;

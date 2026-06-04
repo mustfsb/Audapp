@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 const SETTINGS_FILE: &str = "mixer-channel-settings.json";
 const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-pub const KNOWN_CHANNEL_IDS: &[&str] = &["system", "game", "chat", "browser", "music", "mic"];
+pub const KNOWN_CHANNEL_IDS: &[&str] = &["general", "music", "voice", "game"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -216,22 +216,22 @@ mod tests {
     #[test]
     fn upsert_and_load_round_trip() {
         let dir = temp_dir();
-        let saved = upsert_mixer_channel_setting(&dir, "music".to_string(), 42, true)
+        let saved = upsert_mixer_channel_setting(&dir, "voice".to_string(), 42, true)
             .expect("upsert");
         assert_eq!(saved.volume_percent, 42);
         assert!(saved.muted);
 
         let loaded = load_mixer_channel_settings(&dir);
         assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].channel_id, "music");
+        assert_eq!(loaded[0].channel_id, "voice");
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn volume_is_clamped() {
         let dir = temp_dir();
-        let saved =
-            upsert_mixer_channel_setting(&dir, "system".to_string(), 255, false).expect("upsert");
+        let saved = upsert_mixer_channel_setting(&dir, "general".to_string(), 255, false)
+            .expect("upsert");
         assert_eq!(saved.volume_percent, 100);
         let _ = fs::remove_dir_all(dir);
     }
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn unknown_channel_is_rejected() {
         let dir = temp_dir();
-        let result = upsert_mixer_channel_setting(&dir, "unknown".to_string(), 50, false);
+        let result = upsert_mixer_channel_setting(&dir, "system".to_string(), 50, false);
         assert!(result.is_err());
         let _ = fs::remove_dir_all(dir);
     }
@@ -251,5 +251,13 @@ mod tests {
         reset_mixer_channel_settings(&dir).expect("reset");
         assert!(!settings_file_path(&dir).exists());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn supports_phase_18b_internal_channel_ids() {
+        assert!(KNOWN_CHANNEL_IDS.contains(&"general"));
+        assert!(KNOWN_CHANNEL_IDS.contains(&"music"));
+        assert!(KNOWN_CHANNEL_IDS.contains(&"voice"));
+        assert!(KNOWN_CHANNEL_IDS.contains(&"game"));
     }
 }
