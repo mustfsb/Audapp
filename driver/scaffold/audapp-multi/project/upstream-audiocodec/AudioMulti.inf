@@ -22,7 +22,7 @@ Signature="$WINDOWS NT$"
 Class=MEDIA
 ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider=%ProviderName%
-DriverVer=06/05/2026, 2.0.0.0
+DriverVer=06/05/2026, 2.1.0.0
 CatalogFile=AudioMulti.cat
 PnpLockDown = 1
 
@@ -89,11 +89,11 @@ HKR,,FriendlyName,,%Audio_Device.SpeakerMusic.szPname%
 HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
 HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
 
-[Audio_Device.I.SpeakerVoice]
-AddReg=Audio_Device.I.SpeakerVoice.AddReg
-[Audio_Device.I.SpeakerVoice.AddReg]
+[Audio_Device.I.SpeakerBrowser]
+AddReg=Audio_Device.I.SpeakerBrowser.AddReg
+[Audio_Device.I.SpeakerBrowser.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
-HKR,,FriendlyName,,%Audio_Device.SpeakerVoice.szPname%
+HKR,,FriendlyName,,%Audio_Device.SpeakerBrowser.szPname%
 HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
 HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
 
@@ -130,10 +130,10 @@ AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerMusic%,   Audio_Device.I.Spea
 AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerMusic%,   Audio_Device.I.SpeakerMusic
 AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerMusic%,   Audio_Device.I.SpeakerMusic
 
-; Render endpoint: Audapp Voice
-AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerVoice%,   Audio_Device.I.SpeakerVoice
-AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerVoice%,   Audio_Device.I.SpeakerVoice
-AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerVoice%,   Audio_Device.I.SpeakerVoice
+; Render endpoint: Audapp Browser
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
 
 ; Render endpoint: Audapp Game
 AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerGame%,    Audio_Device.I.SpeakerGame
@@ -152,7 +152,7 @@ AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_Microphone%, Audio_Device.I.Micropho
 ; Render circuit reference strings — MUST match Channels.h circuit names exactly.
 KSNAME_SpeakerGeneral="SpeakerGeneral"
 KSNAME_SpeakerMusic="SpeakerMusic"
-KSNAME_SpeakerVoice="SpeakerVoice"
+KSNAME_SpeakerBrowser="SpeakerBrowser"
 KSNAME_SpeakerGame="SpeakerGame"
 KSNAME_Microphone="Microphone0"
 
@@ -182,6 +182,6 @@ AudioMulti.DeviceDesc = "Audapp Multi"
 ;; Friendly names (these are the Windows endpoint display names).
 Audio_Device.SpeakerGeneral.szPname="Audapp General"
 Audio_Device.SpeakerMusic.szPname="Audapp Music"
-Audio_Device.SpeakerVoice.szPname="Audapp Voice"
+Audio_Device.SpeakerBrowser.szPname="Audapp Browser"
 Audio_Device.SpeakerGame.szPname="Audapp Game"
 Audio_Device.Microphone.szPname="Audapp Multi Microphone"

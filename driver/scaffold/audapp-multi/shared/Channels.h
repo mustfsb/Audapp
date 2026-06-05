@@ -84,14 +84,14 @@ extern const AUDAPP_RENDER_CHANNEL g_AudappRenderChannels[AUDAPP_RENDER_CHANNEL_
 // shipping CODEC_RENDER_COMPONENT_GUID.
 DEFINE_GUID(AUDAPP_RENDER_GENERAL_GUID, 0xce9d337e, 0x931c, 0x48b1, 0x8b, 0x7c, 0x26, 0x8a, 0x2d, 0xac, 0xcb, 0x1f);
 DEFINE_GUID(AUDAPP_RENDER_MUSIC_GUID,   0xf35071ca, 0x8683, 0x4aea, 0x93, 0x6b, 0x10, 0x29, 0x2f, 0x37, 0xc6, 0x3c);
-DEFINE_GUID(AUDAPP_RENDER_VOICE_GUID,   0x1bf49d44, 0x3ec2, 0x455f, 0x99, 0x86, 0x75, 0x06, 0x93, 0x00, 0x45, 0x87);
+DEFINE_GUID(AUDAPP_RENDER_BROWSER_GUID, 0xd278182b, 0x8db8, 0x47d2, 0xae, 0x6d, 0x6e, 0xf1, 0x73, 0x91, 0x72, 0xd2);
 DEFINE_GUID(AUDAPP_RENDER_GAME_GUID,    0x5702375d, 0xcad1, 0x4ead, 0x98, 0xdd, 0x62, 0xbc, 0xfd, 0xd3, 0x25, 0x3c);
 
 // ACX circuit names. These MUST match the INF AddInterface reference strings
 // in AudioMulti.inf character-for-character.
 DECLARE_CONST_UNICODE_STRING(audappRenderGeneralName, L"SpeakerGeneral");
 DECLARE_CONST_UNICODE_STRING(audappRenderMusicName,   L"SpeakerMusic");
-DECLARE_CONST_UNICODE_STRING(audappRenderVoiceName,   L"SpeakerVoice");
+DECLARE_CONST_UNICODE_STRING(audappRenderBrowserName, L"SpeakerBrowser");
 DECLARE_CONST_UNICODE_STRING(audappRenderGameName,    L"SpeakerGame");
 
 // External linkage (C) definition of the shared table.
@@ -102,7 +102,7 @@ extern const AUDAPP_RENDER_CHANNEL g_AudappRenderChannels[AUDAPP_RENDER_CHANNEL_
 {
     { L"general", &AUDAPP_RENDER_GENERAL_GUID, &audappRenderGeneralName, L"SpeakerGeneral", L"Audapp General" },
     { L"music",   &AUDAPP_RENDER_MUSIC_GUID,   &audappRenderMusicName,   L"SpeakerMusic",   L"Audapp Music"   },
-    { L"voice",   &AUDAPP_RENDER_VOICE_GUID,   &audappRenderVoiceName,   L"SpeakerVoice",   L"Audapp Voice"   },
+    { L"browser", &AUDAPP_RENDER_BROWSER_GUID, &audappRenderBrowserName, L"SpeakerBrowser", L"Audapp Browser" },
     { L"game",    &AUDAPP_RENDER_GAME_GUID,    &audappRenderGameName,    L"SpeakerGame",    L"Audapp Game"    },
 };
 #ifdef __cplusplus
