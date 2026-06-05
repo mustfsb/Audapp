@@ -1,0 +1,187 @@
+/*++
+;
+; Audapp Multi — experimental multi-endpoint virtual audio driver (Phase 21B).
+;
+; Audapp-owned INF. Separate package identity from the shipping "Audapp Input"
+; package: hardware id ROOT\AudappMulti, service AudioMulti, binary AudioMulti.sys.
+; This INF must never match ROOT\AudappInput / "Audapp Input" / oem19.inf.
+;
+; Defines FOUR render endpoints (one ACX render circuit each) plus one capture
+; endpoint. Endpoint <-> circuit binding rule: each AddInterface reference string
+; (e.g. SpeakerGeneral) must equal the ACX circuit name assigned in the driver
+; (Channels.h / AcxCircuitInitAssignName). The endpoint FriendlyName comes from
+; the matching [Audio_Device.I.*] AddReg section.
+;
+; COMPILE-ONLY. Not for install on a primary machine. VM-only install is a later
+; phase (21C) and is out of scope here.
+;
+;--*/
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=MEDIA
+ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%ProviderName%
+DriverVer=06/05/2026, 2.1.0.0
+CatalogFile=AudioMulti.cat
+PnpLockDown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+;*****************************************
+; Audapp Multi Device Install Section
+;*****************************************
+
+[Manufacturer]
+%StdMfg%=Standard,NT$ARCH$.10.0...19041
+
+[Standard.NT$ARCH$.10.0...19041]
+%AudioMulti.DeviceDesc%=Audio_Device, ROOT\AudappMulti
+
+[Audio_Device.NT]
+CopyFiles=Audio_Device.NT.Copy
+
+[Audio_Device.NT.Copy]
+AudioMulti.sys
+
+;-------------- Service installation
+
+[Audio_Device.NT.Services]
+AddService = AudioMulti, %SPSVCINST_ASSOCSERVICE%, Audio_Service_Inst
+
+[Audio_Service_Inst]
+DisplayName    = %AudioMulti.DeviceDesc%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\AudioMulti.sys
+
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+
+[SourceDisksFiles]
+AudioMulti.sys  = 1,,
+
+
+[Audio_Device.NT.Wdf]
+KmdfService = AudioMulti, Audio_wdfsect
+[Audio_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+;
+; render interfaces: four Audapp speaker endpoints
+; Each reference string MUST match the ACX circuit name in Channels.h.
+;
+[Audio_Device.I.SpeakerGeneral]
+AddReg=Audio_Device.I.SpeakerGeneral.AddReg
+[Audio_Device.I.SpeakerGeneral.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audio_Device.SpeakerGeneral.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audio_Device.I.SpeakerMusic]
+AddReg=Audio_Device.I.SpeakerMusic.AddReg
+[Audio_Device.I.SpeakerMusic.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audio_Device.SpeakerMusic.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audio_Device.I.SpeakerBrowser]
+AddReg=Audio_Device.I.SpeakerBrowser.AddReg
+[Audio_Device.I.SpeakerBrowser.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audio_Device.SpeakerBrowser.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audio_Device.I.SpeakerGame]
+AddReg=Audio_Device.I.SpeakerGame.AddReg
+[Audio_Device.I.SpeakerGame.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audio_Device.SpeakerGame.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+;
+; capture interface: microphone (single, parity with audapp-input)
+;
+[Audio_Device.I.Microphone]
+AddReg=Audio_Device.I.Microphone.AddReg
+[Audio_Device.I.Microphone.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audio_Device.Microphone.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+;
+; PnP add interface directives for static enumerated audio endpoints.
+;
+[Audio_Device.NT.Interfaces]
+; Render endpoint: Audapp General
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerGeneral%, Audio_Device.I.SpeakerGeneral
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerGeneral%, Audio_Device.I.SpeakerGeneral
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerGeneral%, Audio_Device.I.SpeakerGeneral
+
+; Render endpoint: Audapp Music
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerMusic%,   Audio_Device.I.SpeakerMusic
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerMusic%,   Audio_Device.I.SpeakerMusic
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerMusic%,   Audio_Device.I.SpeakerMusic
+
+; Render endpoint: Audapp Browser
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerBrowser%, Audio_Device.I.SpeakerBrowser
+
+; Render endpoint: Audapp Game
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerGame%,    Audio_Device.I.SpeakerGame
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerGame%,    Audio_Device.I.SpeakerGame
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerGame%,    Audio_Device.I.SpeakerGame
+
+; Capture endpoint: microphone
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_Microphone%, Audio_Device.I.Microphone
+AddInterface=%KSCATEGORY_CAPTURE%,  %KSNAME_Microphone%, Audio_Device.I.Microphone
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_Microphone%, Audio_Device.I.Microphone
+
+[Strings]
+;
+;Non-localizable
+;
+; Render circuit reference strings — MUST match Channels.h circuit names exactly.
+KSNAME_SpeakerGeneral="SpeakerGeneral"
+KSNAME_SpeakerMusic="SpeakerMusic"
+KSNAME_SpeakerBrowser="SpeakerBrowser"
+KSNAME_SpeakerGame="SpeakerGame"
+KSNAME_Microphone="Microphone0"
+
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ProviderName = "Audapp"
+
+Proxy.CLSID         = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO    = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER   = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE  = "{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME = "{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+
+KSNODETYPE_ANY      = "{00000000-0000-0000-0000-000000000000}"
+
+PKEY_AudioEndpoint_ControlPanelPageProvider  = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},1"
+PKEY_AudioEndpoint_Association               = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
+PKEY_AudioEndpoint_Supports_EventDriven_Mode = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},7"
+PKEY_AudioEndpoint_Default_VolumeInDb        = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},9"
+
+;
+;Localizable
+;
+StdMfg = "Audapp"
+DiskId1 = "Audapp Multi Installation Disk"
+AudioMulti.DeviceDesc = "Audapp Multi"
+
+;; Friendly names (these are the Windows endpoint display names).
+Audio_Device.SpeakerGeneral.szPname="Audapp General"
+Audio_Device.SpeakerMusic.szPname="Audapp Music"
+Audio_Device.SpeakerBrowser.szPname="Audapp Browser"
+Audio_Device.SpeakerGame.szPname="Audapp Game"
+Audio_Device.Microphone.szPname="Audapp Multi Microphone"

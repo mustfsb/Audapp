@@ -1,0 +1,44 @@
+# Audapp Multi (Phase 21B) — compile-only multi-endpoint scaffold.
+#
+# Git policy (per Phase 21B decision): commit ONLY Audapp-owned files.
+# The Microsoft-derived ACX AudioCodec sample source is intentionally NOT
+# committed (licensing / provenance), matching the audapp-input scaffold.
+# Those files live on-disk only and are reproduced by copying from
+# driver/scaffold/audapp-input + applying the documented Phase 21B edits.
+#
+# Tracked (Audapp-owned): shared/Channels.h, project/.../AudioMulti.inf,
+# build-multi.ps1, and the scaffold docs/scripts copied from audapp-input.
+
+# --- Build artifacts / intermediates ---
+Common/x64/
+project/build/
+project/out/
+project/*.binlog
+project/*.log
+*.log
+package/
+**/x64/Debug/
+**/x64/Release/
+
+# --- Microsoft-derived ACX sample source (NOT committed) ---
+Common/*.cpp
+Common/*.h
+Common/*.vcxproj
+Common/*.vcxproj.*
+inc/*.h
+shared/Public.h
+shared/Trace.h
+project/upstream-audiocodec/Device.cpp
+project/upstream-audiocodec/Driver.cpp
+project/upstream-audiocodec/DriverSettings.h
+project/upstream-audiocodec/Resources.rc
+project/upstream-audiocodec/ReadMe.txt
+project/upstream-audiocodec/AudioCodec.sln
+project/upstream-audiocodec/AudioCodec.vcxproj
+project/upstream-audiocodec/AudioCodec.vcxproj.Filters
+project/upstream-audiocodec/AudioCodec.inf
+project/import-manifest.json
+project/import-report.txt
+
+# NOTE: shared/Channels.h and project/upstream-audiocodec/AudioMulti.inf are
+# Audapp-owned and intentionally NOT ignored above, so they remain tracked.
