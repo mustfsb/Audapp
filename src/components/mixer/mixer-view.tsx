@@ -5,6 +5,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AudappChannelsStatus } from "@/components/audapp/audapp-channels-status";
+import type { AudappChannelEndpoint } from "@/lib/audapp-endpoints";
 import {
   getChannelRuleMatchLabel,
   getSessionChannelSourceLabel,
@@ -23,6 +25,7 @@ import { VerticalChannelStrip } from "./vertical-channel-strip";
 interface MixerViewProps {
   channels: AudioChannel[];
   sessions: AudioSessionView[];
+  audappChannelEndpoints: AudappChannelEndpoint[];
   resolveChannelForSession: (session: AudioDiscoverySession) => ResolvedInternalChannel;
   routeIntentOptions: Array<{ value: SessionRouteIntent; label: string }>;
   routeCapability: SessionRouteCapability;
@@ -73,6 +76,11 @@ export function MixerView(props: MixerViewProps) {
           <p className="mt-1 text-xs text-destructive">{props.settingsError}</p>
         )}
       </div>
+
+      <AudappChannelsStatus
+        endpoints={props.audappChannelEndpoints}
+        description="Each channel maps to a Windows AudappChannels endpoint when available. Per-app routing is not active yet."
+      />
 
       {/* Channel strips */}
       <div className="overflow-x-auto pb-2">

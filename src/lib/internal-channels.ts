@@ -1,6 +1,6 @@
 import type { AudioChannel } from "../types/audio.ts";
 
-export type InternalChannelId = "general" | "music" | "voice" | "game";
+export type InternalChannelId = "general" | "music" | "game" | "browser";
 
 export type InternalChannelDefinition = {
   id: InternalChannelId;
@@ -28,18 +28,18 @@ export const INTERNAL_CHANNELS: InternalChannelDefinition[] = [
     bucket: "music",
   },
   {
-    id: "voice",
-    label: "Audapp Voice",
-    description: "Internal Audapp group for calls, chat, and meeting apps.",
-    defaultVolume: 68,
-    bucket: "voice",
-  },
-  {
     id: "game",
     label: "Audapp Game",
     description: "Internal Audapp group for games and immersive app audio.",
     defaultVolume: 80,
     bucket: "game",
+  },
+  {
+    id: "browser",
+    label: "Audapp Browser",
+    description: "Internal Audapp group for browser and web audio (Chrome, Edge, Firefox).",
+    defaultVolume: 70,
+    bucket: "browser",
   },
 ] as const;
 

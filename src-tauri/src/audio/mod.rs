@@ -1,4 +1,5 @@
 mod assignments;
+mod audapp_endpoint;
 mod controls;
 mod devices;
 mod diagnostics;

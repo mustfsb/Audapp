@@ -148,14 +148,15 @@ fn read_endpoint(
     let id = read_device_id(device)?;
     let name = read_friendly_name(device).unwrap_or_else(|| "Unknown device".to_string());
     let state = read_device_state(device)?;
+    let is_default = default_id.is_some_and(|default_id| default_id == id);
 
-    Ok(AudioDiscoveryDevice {
-        id: id.clone(),
+    Ok(AudioDiscoveryDevice::new(
+        id,
         name,
-        kind: kind.to_string(),
+        kind.to_string(),
         state,
-        is_default: default_id.is_some_and(|default_id| default_id == id),
-    })
+        is_default,
+    ))
 }
 
 #[cfg(windows)]

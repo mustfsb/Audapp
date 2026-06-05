@@ -8,6 +8,31 @@ pub struct AudioDiscoveryDevice {
     pub kind: String,
     pub state: String,
     pub is_default: bool,
+    /// True when this endpoint belongs to any Audapp driver.
+    pub is_audapp_endpoint: bool,
+    /// "input" | "channel_output" | "legacy_multi" | "unknown", or `None` when
+    /// not an Audapp endpoint.
+    pub audapp_endpoint_kind: Option<String>,
+    /// Internal output channel id ("general" | "music" | "game" | "browser")
+    /// for AudappChannels outputs; `None` otherwise.
+    pub audapp_channel_id: Option<String>,
+}
+
+impl AudioDiscoveryDevice {
+    /// Build a device, deriving the Audapp classification from its friendly name.
+    pub fn new(id: String, name: String, kind: String, state: String, is_default: bool) -> Self {
+        let class = super::audapp_endpoint::classify_audapp_endpoint(&name);
+        Self {
+            id,
+            name,
+            kind,
+            state,
+            is_default,
+            is_audapp_endpoint: class.is_audapp_endpoint,
+            audapp_endpoint_kind: class.kind.map(|kind| kind.as_str().to_string()),
+            audapp_channel_id: class.channel_id.map(|channel| channel.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

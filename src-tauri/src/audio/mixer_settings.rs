@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 const SETTINGS_FILE: &str = "mixer-channel-settings.json";
 const CURRENT_SCHEMA_VERSION: u32 = 1;
 
-pub const KNOWN_CHANNEL_IDS: &[&str] = &["general", "music", "voice", "game"];
+pub const KNOWN_CHANNEL_IDS: &[&str] = &["general", "music", "game", "browser"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -216,14 +216,14 @@ mod tests {
     #[test]
     fn upsert_and_load_round_trip() {
         let dir = temp_dir();
-        let saved = upsert_mixer_channel_setting(&dir, "voice".to_string(), 42, true)
+        let saved = upsert_mixer_channel_setting(&dir, "browser".to_string(), 42, true)
             .expect("upsert");
         assert_eq!(saved.volume_percent, 42);
         assert!(saved.muted);
 
         let loaded = load_mixer_channel_settings(&dir);
         assert_eq!(loaded.len(), 1);
-        assert_eq!(loaded[0].channel_id, "voice");
+        assert_eq!(loaded[0].channel_id, "browser");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -254,10 +254,12 @@ mod tests {
     }
 
     #[test]
-    fn supports_phase_18b_internal_channel_ids() {
+    fn supports_phase_21h_internal_channel_ids() {
         assert!(KNOWN_CHANNEL_IDS.contains(&"general"));
         assert!(KNOWN_CHANNEL_IDS.contains(&"music"));
-        assert!(KNOWN_CHANNEL_IDS.contains(&"voice"));
         assert!(KNOWN_CHANNEL_IDS.contains(&"game"));
+        assert!(KNOWN_CHANNEL_IDS.contains(&"browser"));
+        // Phase 21H retired the "voice" output channel in favor of "browser".
+        assert!(!KNOWN_CHANNEL_IDS.contains(&"voice"));
     }
 }

@@ -1,7 +1,13 @@
 import { Mic2, MonitorSpeaker, RefreshCw } from "lucide-react";
 
+import { AudappChannelsStatus } from "@/components/audapp/audapp-channels-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  audappEndpointBadgeLabel,
+  getAudappEndpointClass,
+  summarizeAudappChannelEndpoints,
+} from "@/lib/audapp-endpoints";
 import { deviceStateLabel } from "@/lib/discovery-display";
 import { cn } from "@/lib/utils";
 import type { AudioDiscoveryDevice } from "@/types/discovery";
@@ -15,6 +21,7 @@ interface DevicesViewProps {
 export function DevicesView({ devices, isLoading, onRefresh }: DevicesViewProps) {
   const outputs = devices.filter((d) => d.kind === "output");
   const inputs = devices.filter((d) => d.kind === "input");
+  const audappChannelEndpoints = summarizeAudappChannelEndpoints(devices);
 
   return (
     <div className="max-w-2xl space-y-5">
@@ -31,9 +38,37 @@ export function DevicesView({ devices, isLoading, onRefresh }: DevicesViewProps)
         </Button>
       </div>
 
+      <AudappChannelsStatus
+        endpoints={audappChannelEndpoints}
+        description="Internal Audapp output channels mapped to their Windows endpoints."
+      />
+
       <DeviceGroup title="Output" icon={MonitorSpeaker} devices={outputs} />
       <DeviceGroup title="Input" icon={Mic2} devices={inputs} />
     </div>
+  );
+}
+
+function AudappEndpointBadge({ device }: { device: AudioDiscoveryDevice }) {
+  const endpointClass = getAudappEndpointClass(device);
+  const label = audappEndpointBadgeLabel(endpointClass);
+  if (!label) {
+    return null;
+  }
+
+  const isLegacy = endpointClass.kind === "legacy_multi";
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "h-5 px-1.5 text-xs",
+        isLegacy
+          ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+          : "border-blue-500/30 text-blue-600 dark:text-blue-400",
+      )}
+    >
+      {isLegacy ? `${label} (stale)` : `Audapp ${label}`}
+    </Badge>
   );
 }
 
@@ -62,6 +97,7 @@ function DeviceGroup({
                 <p className="truncate text-sm font-medium">{device.name}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <AudappEndpointBadge device={device} />
                 {device.isDefault && <Badge className="text-xs h-5 px-1.5">Default</Badge>}
                 <Badge
                   variant="outline"

@@ -17,12 +17,26 @@ export type AudioDiscoverySource = "windows-core-audio" | "mock" | "unavailable"
 
 export type AudioDiscoveryLoadState = "ready" | "loading" | "error" | "empty";
 
+export type AudappEndpointKind =
+  | "input"
+  | "channel_output"
+  | "legacy_multi"
+  | "unknown";
+
+export type AudappOutputChannelId = "general" | "music" | "game" | "browser";
+
 export type AudioDiscoveryDevice = {
   id: string;
   name: string;
   kind: AudioDiscoveryDeviceKind;
   state: AudioDiscoveryDeviceState;
   isDefault: boolean;
+  /** True when this endpoint belongs to any Audapp driver. */
+  isAudappEndpoint?: boolean;
+  /** Endpoint role, or null/undefined for non-Audapp endpoints. */
+  audappEndpointKind?: AudappEndpointKind | null;
+  /** Internal output channel id for AudappChannels outputs; null otherwise. */
+  audappChannelId?: AudappOutputChannelId | null;
 };
 
 export type AudioDiscoverySession = {

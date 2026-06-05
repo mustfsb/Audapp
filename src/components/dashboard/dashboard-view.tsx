@@ -1,6 +1,6 @@
 import {
   Gamepad2,
-  MessageCircle,
+  Globe,
   Mic2,
   MonitorSpeaker,
   Music,
@@ -18,7 +18,7 @@ import type { AudioChannel, AudioDevice } from "@/types/audio";
 const channelIcons: Record<string, React.ElementType> = {
   general: Volume2,
   game: Gamepad2,
-  voice: MessageCircle,
+  browser: Globe,
   music: Music,
 };
 

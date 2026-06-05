@@ -95,8 +95,8 @@ export const mockDevices: AudioDevice[] = [
 export const mockChannels: AudioChannel[] = createInternalAudioChannels("out-1");
 
 export const mockSessions: AppAudioSession[] = [
-  { id: "chrome", name: "Chrome", process: "chrome.exe", channelId: "general", volume: 62, outputDeviceId: "out-1", state: "Foreground" },
-  { id: "discord", name: "Discord", process: "discord.exe", channelId: "voice", volume: 70, outputDeviceId: "out-2", state: "Foreground" },
+  { id: "chrome", name: "Chrome", process: "chrome.exe", channelId: "browser", volume: 62, outputDeviceId: "out-1", state: "Foreground" },
+  { id: "discord", name: "Discord", process: "discord.exe", channelId: "general", volume: 70, outputDeviceId: "out-2", state: "Foreground" },
   { id: "spotify", name: "Spotify", process: "spotify.exe", channelId: "music", volume: 74, outputDeviceId: "out-3", state: "Background" },
   { id: "steam", name: "Steam", process: "steam.exe", channelId: "general", volume: 38, outputDeviceId: "out-1", state: "Idle" },
   { id: "game", name: "GameClient.exe", process: "gameclient.exe", channelId: "game", volume: 81, outputDeviceId: "out-1", state: "Foreground" },

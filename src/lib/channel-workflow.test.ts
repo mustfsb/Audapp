@@ -82,7 +82,23 @@ test("defaults Spotify sessions to Audapp Music", () => {
   assert.equal(resolved.source, "smart_default");
 });
 
-test("defaults Discord-class apps to Audapp Voice", () => {
+test("defaults browser apps to Audapp Browser", () => {
+  for (const processName of [
+    "chrome.exe",
+    "msedge.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+  ]) {
+    const session = createSession({ displayName: processName, processName });
+    const resolved = resolveInternalChannelForSession(session, null);
+
+    assert.equal(resolved.channel.id, "browser", `${processName} should map to browser`);
+    assert.equal(resolved.source, "smart_default");
+  }
+});
+
+test("routes Discord-class apps to Audapp General (no voice output channel)", () => {
   const session = createSession({
     displayName: "Discord",
     processName: "discord.exe",
@@ -90,14 +106,14 @@ test("defaults Discord-class apps to Audapp Voice", () => {
 
   const resolved = resolveInternalChannelForSession(session, null);
 
-  assert.equal(resolved.channel.id, "voice");
+  assert.equal(resolved.channel.id, "general");
   assert.equal(resolved.source, "smart_default");
 });
 
 test("uses Audapp General smart default for ordinary apps", () => {
   const session = createSession({
-    displayName: "Microsoft Edge",
-    processName: "msedge.exe",
+    displayName: "Notepad",
+    processName: "notepad.exe",
   });
 
   const resolved = resolveInternalChannelForSession(session, null);
@@ -178,11 +194,11 @@ test("prefers the highest-priority rule when multiple match", () => {
       id: "rule-high",
       priority: 10,
       pattern: "discord",
-      channelId: "voice",
+      channelId: "browser",
     }),
   ]);
 
-  assert.equal(resolved.channel.id, "voice");
+  assert.equal(resolved.channel.id, "browser");
   assert.equal(resolved.source, "rule");
   assert.equal(resolved.rule?.id, "rule-high");
 });
@@ -215,11 +231,11 @@ test("matches session name contains rules", () => {
     createRule({
       matchType: "session_name_contains",
       pattern: "standup",
-      channelId: "voice",
+      channelId: "browser",
     }),
   ]);
 
-  assert.equal(resolved.channel.id, "voice");
+  assert.equal(resolved.channel.id, "browser");
   assert.equal(resolved.source, "rule");
 });
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { computeSoloState, toggleSoloInSet } from "./solo-resolver.ts";
 
-const ALL_CHANNELS = ["general", "music", "voice", "game"];
+const ALL_CHANNELS = ["general", "music", "game", "browser"];
 
 // ---- computeSoloState ----
 
@@ -14,23 +14,23 @@ test("no channel soloed → soloActive=false, mutedBySoloIds is empty", () => {
   assert.equal(result.soloedIds.size, 0);
 });
 
-test("solo Music → General/Voice/Game are muted-by-solo", () => {
+test("solo Music → General/Game/Browser are muted-by-solo", () => {
   const result = computeSoloState(ALL_CHANNELS, new Set(["music"]));
   assert.equal(result.soloActive, true);
   assert.ok(result.soloedIds.has("music"));
   assert.ok(result.mutedBySoloIds.has("general"));
-  assert.ok(result.mutedBySoloIds.has("voice"));
   assert.ok(result.mutedBySoloIds.has("game"));
+  assert.ok(result.mutedBySoloIds.has("browser"));
   assert.equal(result.mutedBySoloIds.has("music"), false);
 });
 
-test("solo Music + Voice → General/Game are muted-by-solo", () => {
-  const result = computeSoloState(ALL_CHANNELS, new Set(["music", "voice"]));
+test("solo Music + Browser → General/Game are muted-by-solo", () => {
+  const result = computeSoloState(ALL_CHANNELS, new Set(["music", "browser"]));
   assert.equal(result.soloActive, true);
   assert.ok(result.mutedBySoloIds.has("general"));
   assert.ok(result.mutedBySoloIds.has("game"));
   assert.equal(result.mutedBySoloIds.has("music"), false);
-  assert.equal(result.mutedBySoloIds.has("voice"), false);
+  assert.equal(result.mutedBySoloIds.has("browser"), false);
 });
 
 test("solo all channels → mutedBySoloIds is empty", () => {
@@ -64,7 +64,7 @@ test("toggleSoloInSet removes a channel that is already soloed", () => {
 
 test("toggleSoloInSet does not mutate the input set", () => {
   const original = new Set(["music"]);
-  toggleSoloInSet(original, "voice");
+  toggleSoloInSet(original, "browser");
   assert.equal(original.size, 1); // unchanged
-  assert.equal(original.has("voice"), false);
+  assert.equal(original.has("browser"), false);
 });

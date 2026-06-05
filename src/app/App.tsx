@@ -6,6 +6,7 @@ import {
   mockProfiles,
   mockSettings,
 } from "@/data/mock-audio";
+import { summarizeAudappChannelEndpoints } from "@/lib/audapp-endpoints";
 import { resolveInternalChannelForSession } from "@/lib/channel-workflow";
 import { createInternalAudioChannels } from "@/lib/internal-channels";
 import { deriveSessionRouteStatus } from "@/lib/session-route-status";
@@ -158,6 +159,11 @@ export default function App() {
 
   const outputDevices = useMemo(
     () => discoveryDevices.filter((device) => device.kind === "output"),
+    [discoveryDevices],
+  );
+
+  const audappChannelEndpoints = useMemo(
+    () => summarizeAudappChannelEndpoints(discoveryDevices),
     [discoveryDevices],
   );
 
@@ -410,6 +416,7 @@ export default function App() {
       <MixerView
         channels={channels}
         sessions={sessionViews}
+        audappChannelEndpoints={audappChannelEndpoints}
         resolveChannelForSession={resolveChannelForSession}
         routeIntentOptions={routeIntentOptions}
         routeCapability={sessionRouteCapability.capability}
@@ -542,7 +549,7 @@ export default function App() {
         inputDevices={discoveryDevices.filter((d) => d.kind === "input")}
       />
     ),
-    bridge: <BridgeLabView />,
+    bridge: <BridgeLabView audappChannelEndpoints={audappChannelEndpoints} />,
   } satisfies Record<SectionId, ReactElement>;
 
   return (

@@ -39,7 +39,7 @@ export interface AudioChannel {
   id: string;
   name: string;
   description?: string;
-  bucket: "general" | "music" | "voice" | "game";
+  bucket: "general" | "music" | "game" | "browser";
   volume: number;
   muted: boolean;
   solo: boolean;

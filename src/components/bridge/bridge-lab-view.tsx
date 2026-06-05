@@ -1,9 +1,11 @@
 import { useState } from "react";
 
+import { AudappChannelsStatus } from "@/components/audapp/audapp-channels-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import type { AudappChannelEndpoint } from "@/lib/audapp-endpoints";
 import { cn } from "@/lib/utils";
 import { useAudioBridge } from "@/lib/use-audio-bridge";
 import { useRouting } from "@/lib/use-routing";
@@ -133,7 +135,11 @@ function StreamSection({
   );
 }
 
-export function BridgeLabView() {
+interface BridgeLabViewProps {
+  audappChannelEndpoints: AudappChannelEndpoint[];
+}
+
+export function BridgeLabView({ audappChannelEndpoints }: BridgeLabViewProps) {
   const { status, candidates, isLoading, candidatesLoading, error, start, stop, refresh, fetchCandidates } = useAudioBridge();
   const { status: routing, isLoading: routingLoading, error: routingError, enable: enableRouting, disable: disableRouting } = useRouting();
 
@@ -175,6 +181,11 @@ export function BridgeLabView() {
           Phase 17A — One-click system routing + manual bridge POC.
         </p>
       </div>
+
+      <AudappChannelsStatus
+        endpoints={audappChannelEndpoints}
+        description="AudappChannels output endpoints detected by discovery. Per-channel audio routing is not wired yet; the Audapp Input bridge below is unchanged."
+      />
 
       {/* ── Routing Control ── */}
       <section className="space-y-3">

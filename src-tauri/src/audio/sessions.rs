@@ -494,20 +494,20 @@ mod tests {
     #[test]
     fn collapse_system_sounds_keeps_one_row_and_preserves_apps() {
         let devices = vec![
-            AudioDiscoveryDevice {
-                id: "default-out".to_string(),
-                name: "Speakers".to_string(),
-                kind: "output".to_string(),
-                state: "active".to_string(),
-                is_default: true,
-            },
-            AudioDiscoveryDevice {
-                id: "hdmi-out".to_string(),
-                name: "HDMI".to_string(),
-                kind: "output".to_string(),
-                state: "active".to_string(),
-                is_default: false,
-            },
+            AudioDiscoveryDevice::new(
+                "default-out".to_string(),
+                "Speakers".to_string(),
+                "output".to_string(),
+                "active".to_string(),
+                true,
+            ),
+            AudioDiscoveryDevice::new(
+                "hdmi-out".to_string(),
+                "HDMI".to_string(),
+                "output".to_string(),
+                "active".to_string(),
+                false,
+            ),
         ];
 
         let sessions = vec![

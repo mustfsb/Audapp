@@ -24,7 +24,8 @@ export type ResolvedInternalChannel = {
 };
 
 const MUSIC_MATCHERS = ["spotify"];
-const VOICE_MATCHERS = ["discord", "teams", "ms-teams", "zoom"];
+// Browser / web-audio processes route to the Audapp Browser channel.
+const BROWSER_MATCHERS = ["chrome", "msedge", "edge", "firefox", "brave", "opera", "vivaldi"];
 
 function sessionIdentityParts(session: AudioDiscoverySession): string[] {
   return [session.displayName, session.processName, session.executablePath]
@@ -48,10 +49,12 @@ export function getSmartDefaultInternalChannelId(
     return "music";
   }
 
-  if (includesAnyMatcher(parts, VOICE_MATCHERS)) {
-    return "voice";
+  if (includesAnyMatcher(parts, BROWSER_MATCHERS)) {
+    return "browser";
   }
 
+  // Voice/meeting apps (Discord, Teams, Zoom) intentionally fall through to the
+  // General fallback — they are not forced onto an output channel in Phase 21H.
   return "general";
 }
 
