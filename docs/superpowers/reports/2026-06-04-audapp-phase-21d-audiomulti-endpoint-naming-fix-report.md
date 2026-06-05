@@ -7,6 +7,12 @@
 
 ---
 
+## STATUS: INCOMPLETE — Persistent endpoint naming NOT achieved
+
+Phase 21D is **partially complete**. The Voice→Browser source rename is done and the driver is healthy. However, the primary acceptance criterion — user-visible distinct endpoint names in Windows Sound / mmsys.cpl — is **NOT met**. Windows Sound continues to display four endpoints as "Hoparlör (Audapp Multi)". The naming fix failed.
+
+---
+
 ## 1. Snapshot Confirmation
 
 VM snapshot **"before 21d naming fix"** confirmed by user before any mutating action.
@@ -25,7 +31,7 @@ Old endpoint names: all four render endpoints displayed identically as "Hoparlö
 
 ---
 
-## 3. Source Changes
+## 3. Source Changes (Complete)
 
 ### 3a. `shared/Channels.h`
 
@@ -44,7 +50,6 @@ New GUID generated fresh (not reused from Voice).
 | Interface section | `[Audio_Device.I.SpeakerVoice]` | `[Audio_Device.I.SpeakerBrowser]` |
 | AddReg section | `[Audio_Device.I.SpeakerVoice.AddReg]` | `[Audio_Device.I.SpeakerBrowser.AddReg]` |
 | HKR FriendlyName | `%Audio_Device.SpeakerVoice.szPname%` | `%Audio_Device.SpeakerBrowser.szPname%` |
-| AddInterface comment | `; Render endpoint: Audapp Voice` | `; Render endpoint: Audapp Browser` |
 | AddInterface lines (3) | `%KSNAME_SpeakerVoice%` | `%KSNAME_SpeakerBrowser%` |
 | Strings: KSNAME | `KSNAME_SpeakerVoice="SpeakerVoice"` | `KSNAME_SpeakerBrowser="SpeakerBrowser"` |
 | Strings: szPname | `Audio_Device.SpeakerVoice.szPname="Audapp Voice"` | `Audio_Device.SpeakerBrowser.szPname="Audapp Browser"` |
@@ -54,17 +59,16 @@ No overlap with oem19.inf / ROOT\AudappInput / Audapp Input.
 
 ### 3c. `Common/Private.h`
 
-- Added `PCWSTR FriendlyName;` field to `CODEC_PIN_CONTEXT` (stores per-circuit name on bridge pin)
-- Added `EVT_ACX_PIN_RETRIEVE_NAME CodecR_EvtBridgePinRetrieveName;` declaration in Codec Render section
-- Updated `CodecR_CreateRenderCircuit` prototype to add `_In_opt_ PCWSTR FriendlyName` parameter
+- Added `PCWSTR FriendlyName;` field to `CODEC_PIN_CONTEXT`
+- Added `EVT_ACX_PIN_RETRIEVE_NAME CodecR_EvtBridgePinRetrieveName;` declaration
+- Updated `CodecR_CreateRenderCircuit` prototype: added `_In_opt_ PCWSTR FriendlyName` parameter
 
 ### 3d. `Common/RenderCircuit.cpp`
 
-- Added `CodecR_EvtBridgePinRetrieveName` callback: reads `pinCtx->FriendlyName` and returns it via `RtlUnicodeStringPrintf`
-- Bridge pin creation: registers `EvtAcxPinRetrieveName` callback when `FriendlyName != nullptr`, stores `FriendlyName` in pin context
-- `CodecR_CreateRenderCircuit` signature: added `_In_opt_ PCWSTR FriendlyName` parameter
-- `CodecR_AddStaticRender` (legacy): passes `nullptr` for FriendlyName
-- `CodecR_AddStaticRenderMulti` (multi-endpoint): passes `Channels[i].FriendlyName`
+- Added `CodecR_EvtBridgePinRetrieveName` callback: reads `pinCtx->FriendlyName`, returns via `RtlUnicodeStringPrintf`
+- Bridge pin creation: registers `EvtAcxPinRetrieveName` when `FriendlyName != nullptr`; stores `FriendlyName` in pin context
+- `CodecR_AddStaticRender` (legacy): passes `nullptr`
+- `CodecR_AddStaticRenderMulti`: passes `Channels[i].FriendlyName`
 
 ---
 
@@ -74,96 +78,74 @@ No overlap with oem19.inf / ROOT\AudappInput / Audapp Input.
 |---|---|
 | `invoke-msbuild-multi.cmd` (Device.cpp, Driver.cpp) | Success, 0 errors, 0 warnings |
 | Staged SYS + stamped INF to `package/Debug/x64/` | OK |
-| `Generate-Catalog-multi.ps1` (Inf2Cat, OsTarget=10_VB_X64) | Success, no errors |
-| `Sign-Catalog-multi.ps1 -SignSys` | AudioMulti.cat + AudioMulti.sys signed, CN=Audapp VM Test Code Signing |
+| `Generate-Catalog-multi.ps1` (Inf2Cat, OsTarget=10_VB_X64) | Success |
+| `Sign-Catalog-multi.ps1 -SignSys` | AudioMulti.cat + AudioMulti.sys signed |
 | `pnputil /add-driver AudioMulti.inf /install` | Published: **oem21.inf**, installed on ROOT\DEVGEN\AUDAPPMULTI21C0001 |
 
 ---
 
-## 5. Code 37 / Driver Health
+## 5. Driver Health
 
 | Property | Value |
 |---|---|
 | Status | OK |
 | Problem | CM_PROB_NONE |
-| ConfigManagerErrorCode | CM_PROB_NONE |
 | Driver | oem21.inf / AudioMulti |
 
-**No Code 37. PASS.**
+No Code 37. Driver healthy. Audapp Input untouched on oem19.inf.
 
 ---
 
-## 6. Naming Investigation Results
+## 6. Endpoint Naming: FAILED
 
-### Why "Hoparlör (Audapp Multi)" persisted in Phase 21C
+### Acceptance criterion
 
-Phase 21C found the endpoints were circuit-distinct (speakergeneral/music/voice/game) but all displayed "Hoparlör (Audapp Multi)". This was traced to the ACX 1.0 AudioEndpointBuilder (AEB) on Win10 behavior:
+User-visible distinct endpoint names in Windows Sound (mmsys.cpl) and IMMDevice enumeration:
+- Audapp General
+- Audapp Music
+- Audapp Game
+- Audapp Browser
 
-- The AEB builds the SWD endpoint FriendlyName as `{LocalizedFormFactor} ({ParentDeviceName})`
-- FormFactor = "Hoparlör" (localized "Speaker") from `KSNODETYPE_SPEAKER` bridge pin category
-- ParentDeviceName = "Audapp Multi" (from INF DeviceDesc for ROOT\DEVGEN\AUDAPPMULTI21C0001)
-- All 4 circuits share the same parent device → all get "Audapp Multi"
+### Actual result
 
-### What DOES work
+**Windows Sound still shows four endpoints as "Hoparlör (Audapp Multi)".** The acceptance criterion is NOT met.
 
-- Per-circuit KS interface sub-keys ARE created by the ACX runtime (`#SpeakerGeneral`, `#SpeakerMusic`, `#SpeakerGame`, `#SpeakerBrowser`)
-- INF AddReg `HKR,,FriendlyName` values ARE written to these sub-keys:
-  - `#SpeakerGeneral\Device Parameters\FriendlyName` = "Audapp General" ✓
-  - `#SpeakerMusic\Device Parameters\FriendlyName` = "Audapp Music" ✓
-  - `#SpeakerGame\Device Parameters\FriendlyName` = "Audapp Game" ✓
-  - `#SpeakerBrowser\Device Parameters\FriendlyName` = "Audapp Browser" ✓
-- `EVT_ACX_PIN_RETRIEVE_NAME` callback on the render bridge pin IS called by the ACX stack for KSPROPERTY_PIN_NAME queries
+### What was attempted
 
-### What DOESN'T work (ACX 1.0 Win10 limitation)
+1. **INF AddReg FriendlyName**: Per-circuit KS interface sub-keys (`#SpeakerGeneral`, `#SpeakerMusic`, `#SpeakerGame`, `#SpeakerBrowser`) ARE created with correct `FriendlyName` values in `Device Parameters`. These values are present in the registry but are not used by AudioEndpointBuilder for the SWD endpoint display name.
 
-- The AEB does NOT read per-circuit KS interface `FriendlyName` for the SWD endpoint name
-- The AEB does NOT use `EVT_ACX_PIN_RETRIEVE_NAME` output for the SWD endpoint FriendlyName
-- The SWD endpoint FriendlyName is derived from the parent device name alone
-- Direct writes to `HKLM\SYSTEM\CurrentControlSet\Enum\SWD\MMDEVAPI\{endpoint}\FriendlyName` succeed but are overwritten by AEB on device re-enumeration
-- The MMDevice property store (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\{}\Properties`) has ACL-protected entries; `{b3f8fa53...},6` cannot be updated even as Administrator
+2. **`EVT_ACX_PIN_RETRIEVE_NAME` callback**: Wired to render bridge pins. The ACX stack calls this for `KSPROPERTY_PIN_NAME` queries. However, AudioEndpointBuilder on Win10 ACX 1.0 does NOT use the pin name query result to set the SWD endpoint FriendlyName.
 
----
+3. **Direct SWD registry write**: Wrote per-circuit names directly to `HKLM:\SYSTEM\CurrentControlSet\Enum\SWD\MMDEVAPI\{ep}\FriendlyName`. This produced transient session-visible names, but **AudioEndpointBuilder overwrites them on every device re-enumeration** (device disable/enable, reboot, service restart) from the parent device name. This is not a real fix and is explicitly rejected as an acceptance criterion.
 
-## 7. Windows Endpoint Names
+4. **MMDevice property store write**: `HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\{}\Properties\{b3f8fa53-...},6` has ACL-protected entries. Even Administrator cannot write this path. Blocked.
 
-### Current state (session-persistent via SWD registry write)
+### Root cause (confirmed)
 
-| Circuit | SWD FriendlyName (Windows Sound Settings) |
-|---|---|
-| speakergeneral | **Audapp General** |
-| speakermusic | **Audapp Music** |
-| speakergame | **Audapp Game** |
-| speakerbrowser | **Audapp Browser** |
-| capture | Mikrofon (Audapp Multi) |
-| Audapp Input render | Hoparlör (Audapp Input) |
-| Audapp Input capture | Mikrofon (Audapp Input) |
-
-The per-circuit SWD FriendlyNames are set correctly in the current session. However, they reset to "Hoparlör (Audapp Multi)" if the device is disabled/re-enabled or after a system restart + re-enumeration, because the AEB rewrites them from the parent device name.
-
-### WASAPI probe display
-
-The WASAPI `IMMDevice` property store shows "Hoparlör (Audapp Multi)" for all AudioMulti render circuits (the MMDevice Properties store is ACL-protected). This is a cosmetic gap in the probe output only — WASAPI functionality is unaffected.
-
----
-
-## 8. WASAPI Probe
+ACX 1.0 on Win10 19045 — the AudioEndpointBuilder (AEB) derives all render endpoint SWD FriendlyNames from the **parent device name** using the pattern:
 
 ```
-Endpoints probed:  9
-Activated OK:      8/9
-Initialized OK:    8/9
-Started OK:        8/9
-Stopped OK:        8/9
-All WASAPI steps passed: NO (1 stale Phase 21C residue)
+{LocalizedFormFactor} ({ParentDeviceName})
+→ "Hoparlör (Audapp Multi)"
 ```
 
-The 1 failure: `{32a5c561}` = old `speakervoice` endpoint from Phase 21C (State: not_present, AUDCLNT_E_DEVICE_INVALIDATED). This is expected — Phase 21D replaced it with `speakerbrowser`. The stale MMDevice entry persists until the device is fully re-enumerated or the registry is cleaned.
+Where:
+- FormFactor = "Hoparlör" (localized "Speaker") — from `KSNODETYPE_SPEAKER` bridge pin category
+- ParentDeviceName = "Audapp Multi" — from INF `AudioMulti.DeviceDesc` for the single ROOT\AudappMulti device
 
-**All 4 active AudioMulti circuits: Activate OK, GetMixFormat OK (44100Hz 2ch), Initialize OK, Start OK, Stop OK.**
+All four circuits share the same parent device (`ROOT\DEVGEN\AUDAPPMULTI21C0001`), so the AEB assigns the same name to all four SWD endpoints. Neither the per-circuit INF `FriendlyName` entries, nor the `EVT_ACX_PIN_RETRIEVE_NAME` DDI output, nor any post-install registry write produces a persistent change to what Windows Sound displays.
 
 ---
 
-## 9. Live Audapp Input After-Check
+## 7. WASAPI Probe
+
+Four active AudioMulti circuits are functional (WASAPI Activate/Initialize/Start/Stop pass). WASAPI functionality is not impaired. The naming failure is display-only but is a hard requirement.
+
+One stale endpoint `{32a5c561}` = old `speakervoice` from Phase 21C — `AUDCLNT_E_DEVICE_INVALIDATED`. Expected; needs cleanup in Phase 21E.
+
+---
+
+## 8. Live Audapp Input After-Check
 
 | Property | Value |
 |---|---|
@@ -171,56 +153,72 @@ The 1 failure: `{32a5c561}` = old `speakervoice` endpoint from Phase 21C (State:
 | ProblemCode | 0 |
 | Service | AudioCodec |
 | DriverInfPath | oem19.inf |
-| devcon status | Driver is running |
 
-**PASS** — Audapp Input unchanged.
-
----
-
-## 10. Files Changed
-
-| File | Change |
-|---|---|
-| `shared/Channels.h` | Voice→Browser, new GUID {D278182B-...} |
-| `project/upstream-audiocodec/AudioMulti.inf` | SpeakerVoice→SpeakerBrowser throughout, DriverVer 2.1.0.0 |
-| `Common/Private.h` | Added `FriendlyName` to `CODEC_PIN_CONTEXT`, added callback declaration, updated prototype |
-| `Common/RenderCircuit.cpp` | Added `CodecR_EvtBridgePinRetrieveName`, wired to bridge pin, threaded FriendlyName through call chain |
+PASS — Audapp Input unchanged.
 
 ---
 
-## 11. Summary and Recommendation
+## 9. Summary
 
 ### What was completed
 
-- ✓ Voice→Browser rename in source, INF, channel table, GUIDs
-- ✓ Driver rebuilt (AudioMulti.sys), signed, published as oem21.inf
-- ✓ No Code 37; device Status OK
-- ✓ `EVT_ACX_PIN_RETRIEVE_NAME` infrastructure added (correct DDI, hooks in place)
-- ✓ Per-circuit KS interface FriendlyNames correctly written by INF
+- ✓ Voice→Browser rename in source, INF, channel table, GUIDs (committed, c5fa38e)
+- ✓ Driver rebuilt, signed, published as oem21.inf
+- ✓ No Code 37; driver Status OK
+- ✓ `EVT_ACX_PIN_RETRIEVE_NAME` infrastructure added (correct DDI hook, in place for future use)
+- ✓ Per-circuit KS interface FriendlyNames correctly written by INF to registry
 - ✓ WASAPI: 4 active circuits fully functional
-- ✓ Windows Sound Settings: "Audapp General/Music/Game/Browser" visible (session-persistent)
 - ✓ Audapp Input untouched
 
-### Phase 21E design item: persistent naming
+### What was NOT achieved
 
-The per-circuit endpoint naming does not survive device re-enumeration under ACX 1.0 on Win10. The AEB writes "Hoparlör (Audapp Multi)" on every re-enable from the parent device name. To make this persistent without relying on a post-install registry patch, Phase 21E should investigate:
+- ✗ **Persistent user-visible endpoint naming** — Windows Sound shows "Hoparlör (Audapp Multi)" ×4
+- ✗ SWD registry writes are non-persistent (AEB resets on re-enumeration)
+- ✗ MMDevice property store write is blocked by ACL
+- ✗ INF per-circuit FriendlyName is not read by AEB for SWD endpoint naming
 
-1. **Separate devnodes per circuit**: 4 separate `ROOT\AudappMulti_*` devices, each with distinct INF DeviceDesc ("Audapp General" etc.). This would give each endpoint its own device-level FriendlyName that the AEB would use.
-2. **ACX composite template pattern**: Investigate whether `ACXCOMPOSITETEMPLATE` (used in the CODECMC sample) provides per-circuit container control on Win10.
-3. **AcxCircuitInitAssignAcxRequestPreprocessCallback**: Handle the device-level KSPROPERTY that AEB reads for container naming.
-4. **Post-install naming service**: A lightweight service or driver co-installer that sets the SWD FriendlyNames after device enumeration.
-
-### Recommendation
-
-**Proceed to Phase 21E** with Option 1 (separate devnodes) as the most straightforward approach for Win10 ACX 1.0. The current Phase 21D state is:
-- Code correct and committed (Voice→Browser rename complete)
-- WASAPI functional for all 4 circuits
-- Naming visible in Sound Settings for current session
-- Persistent naming is the only remaining open item
+Phase 21D naming objective is **incomplete**.
 
 ---
 
-## 12. Rollback
+## 10. Phase 21E: Recommended Fix
+
+### Problem
+
+All four circuits share one parent device node (`ROOT\AudappMulti`). The AEB names every endpoint from that one parent. There is no supported ACX 1.0 API to override this per-circuit from within a single device.
+
+### Recommended approach: Separate root devnodes per endpoint
+
+Create four separate device nodes, each with its own DeviceDesc:
+
+| Device ID | INF DeviceDesc | Expected Windows Sound name |
+|---|---|---|
+| `ROOT\AudappGeneral` | "Audapp General" | "Hoparlör (Audapp General)" |
+| `ROOT\AudappMusic` | "Audapp Music" | "Hoparlör (Audapp Music)" |
+| `ROOT\AudappGame` | "Audapp Game" | "Hoparlör (Audapp Game)" |
+| `ROOT\AudappBrowser` | "Audapp Browser" | "Hoparlör (Audapp Browser)" |
+
+Each devnode gets its own service instance, its own single-circuit INF section. The AEB then derives the SWD endpoint name from each device's own DeviceDesc, giving permanently distinct display names without any post-install registry patching.
+
+This requires:
+- Four separate `[Manufacturer]` match entries in INF (or four separate INF files)
+- Four separate devgen device nodes
+- Four separate ACX circuit registrations (one per driver instance)
+- Distinct service names per circuit, or one service handling all four hardware IDs
+
+### Alternative approaches (lower confidence)
+
+- **AcxCompositeTemplate pattern**: Investigate whether the CODECMC composite sample provides per-circuit container identity on Win10. Unknown if this affects AEB naming.
+- **Post-install naming service**: A lightweight service writes SWD FriendlyNames after each AEB enumeration event. Fragile; not recommended as primary.
+
+### Do not proceed without
+
+1. A fresh VM snapshot ("before 21e") taken by the user
+2. Explicit Phase 21E prompt and scope confirmation
+
+---
+
+## 11. Rollback
 
 Primary: **revert to VM snapshot "before 21d naming fix"**.
 
