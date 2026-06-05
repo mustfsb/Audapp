@@ -23,7 +23,12 @@ pub fn run() {
         .setup(|app| {
             if let Ok(data_dir) = app.path().app_local_data_dir() {
                 audio_engine::dsp_load_and_apply_persisted(&data_dir);
+                let mixer_settings = audio::load_mixer_channel_settings(&data_dir);
+                audio_bridge::init_runtime_channel_config(&mixer_settings);
+            } else {
+                audio_bridge::init_runtime_channel_config(&[]);
             }
+            audio_policy::routing_auto_start();
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -60,6 +65,10 @@ pub fn run() {
             bridge_commands::stop_audio_bridge_poc,
             bridge_commands::get_audio_bridge_status,
             bridge_commands::list_bridge_candidates,
+            bridge_commands::get_multichannel_bridge_status,
+            bridge_commands::list_multichannel_bridge_candidates,
+            bridge_commands::start_multichannel_bridge,
+            bridge_commands::stop_multichannel_bridge,
             routing_commands::routing_get_status_cmd,
             routing_commands::routing_enable_system,
             routing_commands::routing_disable_system,
@@ -74,6 +83,7 @@ pub fn run() {
             if let tauri::WindowEvent::Destroyed = event {
                 audio_engine::engine_shutdown();
                 audio_engine::routing_shutdown();
+                audio_policy::routing_shutdown();
                 audio_bridge::bridge_shutdown();
                 voice_lab::voice_shutdown();
             }

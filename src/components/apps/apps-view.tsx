@@ -18,6 +18,7 @@ import {
   type ResolvedInternalChannel,
 } from "@/lib/channel-workflow";
 import { sessionDisplayLabel, sessionVolumePercent } from "@/lib/discovery-display";
+import { summarizeSessionRoutingHonesty } from "@/lib/session-routing-honesty";
 import { formatRouteApplyStatus } from "@/lib/session-route-status";
 import { isSessionControllable } from "@/lib/session-target";
 import type { AudioChannel } from "@/types/audio";
@@ -141,6 +142,7 @@ function describeResolvedChannel(resolvedChannel: ResolvedInternalChannel): stri
 export function AppsView({
   sessions,
   channels,
+  outputDevices,
   resolveChannelForSession,
   isLoading,
   isAssignmentsLoading,
@@ -166,8 +168,8 @@ export function AppsView({
         <div>
           <h1 className="text-xl font-semibold">Apps</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Per-app output switching is experimental. Internal Audapp channels are
-            separate from Windows endpoint routing.
+            Requested Audapp channels are separate from the Windows endpoint each app
+            is actually using.
           </p>
           {!routeCapability.perAppSwitchingSupported && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -196,6 +198,11 @@ export function AppsView({
         <div className="grid gap-2 xl:grid-cols-2">
           {sessions.map((session) => {
             const resolvedChannel = resolveChannelForSession(session);
+            const routingHonesty = summarizeSessionRoutingHonesty(
+              session,
+              resolvedChannel,
+              outputDevices,
+            );
             const controllable = isSessionControllable(session);
             const pending = isSessionPending(session);
             const inlineError = sessionError(session);
@@ -272,13 +279,18 @@ export function AppsView({
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
                     Route intent is stored separately from Audapp internal channel grouping.
                   </p>
+                  <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Requested Audapp channel: {routingHonesty.requestedChannelLabel}
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
+                    </p>
+                  </div>
                   {session.routeStatus && (
                     <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
                         Apply status: {formatRouteApplyStatus(session.routeStatus.applyStatus)}
-                      </p>
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Applied endpoint: {session.routeStatus.appliedEndpointName ?? "none"}
                       </p>
                       {session.routeStatus.note && (
                         <p className="text-[11px] leading-relaxed text-muted-foreground">

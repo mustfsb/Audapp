@@ -167,23 +167,6 @@ export default function App() {
     [discoveryDevices],
   );
 
-  const mixerOutputDevices = useMemo(
-    () =>
-      outputDevices.map((device) => ({
-        id: device.id,
-        name: device.name,
-        kind: device.kind,
-        connection: "Windows endpoint",
-        isDefault: device.isDefault,
-        sampleRate: 0,
-        bitDepth: 0,
-        health: device.state === "active" ? ("Healthy" as const) : ("Attention" as const),
-        channels: "Unknown",
-        latencyMs: 0,
-      })),
-    [outputDevices],
-  );
-
   function updateChannel(id: string, updater: (channel: AudioChannel) => AudioChannel) {
     setChannels((current) => current.map((channel) => (channel.id === id ? updater(channel) : channel)));
   }
@@ -421,7 +404,7 @@ export default function App() {
         routeIntentOptions={routeIntentOptions}
         routeCapability={sessionRouteCapability.capability}
         assignmentCountsByChannel={assignmentCountsByChannel}
-        outputDevices={mixerOutputDevices.length > 0 ? mixerOutputDevices : []}
+        outputDevices={outputDevices}
         onRouteIntentChange={(session, intent) => {
           if (intent === "system") {
             void sessionRouteIntents.clearIntentForSession(session);
@@ -449,9 +432,6 @@ export default function App() {
         soloedChannelIds={soloState.soloedIds}
         mutedBySoloIds={soloState.mutedBySoloIds}
         isSoloActive={soloState.soloActive}
-        onOutputChange={(id, outputDeviceId) =>
-          updateChannel(id, (channel) => ({ ...channel, outputDeviceId }))
-        }
         channelErrors={channelErrors}
         channelIsPending={channelIsPending}
         settingsError={mixerChannelSettings.error}

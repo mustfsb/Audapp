@@ -20,6 +20,7 @@ mod com;
 pub use assignments::{
     load_assignments, match_rule_from_session, remove_assignment, upsert_assignment,
 };
+pub(crate) use audapp_endpoint::{classify_audapp_endpoint, AudappEndpointKind};
 pub use controls::{set_session_mute_with_snapshot, set_session_volume_with_snapshot};
 pub use diagnostics::{
     enumerate_endpoint_diagnostics, probe_endpoint, AudioEndpointDiagnostic, EndpointProbeResult,
@@ -36,8 +37,8 @@ pub use session_intents::{
 };
 use types::AudioDiscoveryStatus;
 pub use types::{
-    AudioDiscoverySession, AudioDiscoverySnapshot, AudioSessionControlResult, AudioSessionTarget,
-    ChannelAssignment, ChannelAssignmentMatch,
+    AudioDiscoveryDevice, AudioDiscoverySession, AudioDiscoverySnapshot,
+    AudioSessionControlResult, AudioSessionTarget, ChannelAssignment, ChannelAssignmentMatch,
 };
 
 /// Returns a complete Windows Core Audio discovery snapshot.

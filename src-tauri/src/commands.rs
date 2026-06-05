@@ -8,6 +8,9 @@ use crate::audio::{
     EndpointProbeResult, MixerChannelSetting, SessionRouteCapability, SessionRouteIntent,
     SessionRouteIntentEntry,
 };
+use crate::audio_bridge::{
+    init_runtime_channel_config, reset_runtime_channel_config, update_runtime_channel_config,
+};
 use serde::Deserialize;
 use serde::Serialize;
 use tauri::Manager;
@@ -174,7 +177,9 @@ pub fn get_mixer_channel_settings(
     app: tauri::AppHandle,
 ) -> Result<Vec<MixerChannelSetting>, String> {
     let base_dir = app_data_dir(&app)?;
-    Ok(load_mixer_channel_settings(&base_dir))
+    let settings = load_mixer_channel_settings(&base_dir);
+    init_runtime_channel_config(&settings);
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -184,14 +189,18 @@ pub fn set_mixer_channel_setting(
 ) -> Result<MixerChannelSetting, String> {
     let base_dir = app_data_dir(&app)?;
     let volume_percent = input.volume_percent.clamp(0.0, 100.0).round() as u8;
-    upsert_mixer_channel_setting(&base_dir, input.channel_id, volume_percent, input.muted)
-        .map_err(|error| error.message())
+    let saved = upsert_mixer_channel_setting(&base_dir, input.channel_id, volume_percent, input.muted)
+        .map_err(|error| error.message())?;
+    update_runtime_channel_config(&saved.channel_id, saved.volume_percent, saved.muted)?;
+    Ok(saved)
 }
 
 #[tauri::command]
 pub fn reset_mixer_channel_settings(app: tauri::AppHandle) -> Result<(), String> {
     let base_dir = app_data_dir(&app)?;
-    reset_persisted_mixer_settings(&base_dir).map_err(|error| error.message())
+    reset_persisted_mixer_settings(&base_dir).map_err(|error| error.message())?;
+    reset_runtime_channel_config();
+    Ok(())
 }
 
 #[tauri::command]

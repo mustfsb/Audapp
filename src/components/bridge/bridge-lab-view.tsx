@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { AudappChannelsStatus } from "@/components/audapp/audapp-channels-status";
 import { Badge } from "@/components/ui/badge";
@@ -6,16 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import type { AudappChannelEndpoint } from "@/lib/audapp-endpoints";
-import { cn } from "@/lib/utils";
 import { useAudioBridge } from "@/lib/use-audio-bridge";
+import { useMultichannelBridge } from "@/lib/use-multichannel-bridge";
 import { useRouting } from "@/lib/use-routing";
-import type { BridgeMode, BridgePocConfig } from "@/types/bridge";
+import { cn } from "@/lib/utils";
+import type {
+  BridgeMode,
+  BridgePocConfig,
+  MultichannelSourceStatus,
+} from "@/types/bridge";
 
-// Known Phase 13A endpoint IDs — used as fallback if candidates not loaded yet
 const AUDAPP_RENDER_ID =
   "{0.0.0.00000000}.{6dee1be1-f344-45e4-aa77-2fb20caac6b9}";
 const AUDAPP_CAPTURE_ID =
   "{0.0.1.00000000}.{84bbfd53-05f2-4232-b20b-f8c4237c18d6}";
+
+const CHANNEL_ORDER = ["general", "music", "game", "browser"] as const;
 
 function stateColor(state: string) {
   switch (state) {
@@ -33,11 +39,16 @@ function stateColor(state: string) {
 
 function modeLabel(mode: BridgeMode): string {
   switch (mode) {
-    case "passthrough": return "pass-through";
-    case "resampled_passthrough": return "resampled pass-through";
-    case "format_mismatch": return "format mismatch";
-    case "error": return "error";
-    default: return "capture only";
+    case "passthrough":
+      return "pass-through";
+    case "resampled_passthrough":
+      return "resampled pass-through";
+    case "format_mismatch":
+      return "format mismatch";
+    case "error":
+      return "error";
+    default:
+      return "capture only";
   }
 }
 
@@ -46,7 +57,7 @@ function modeColor(mode: BridgeMode): string {
     case "passthrough":
       return "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30";
     case "resampled_passthrough":
-      return "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30";
+      return "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30";
     case "format_mismatch":
       return "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
     case "error":
@@ -60,7 +71,20 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-2.5">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-mono text-xs">{value}</span>
+      <span className="font-mono text-xs text-right">{value}</span>
+    </div>
+  );
+}
+
+function MeterRow({ label, value }: { label: string; value: number }) {
+  const pct = Math.min(100, value * 100);
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-[11px] text-muted-foreground">
+        <span>{label}</span>
+        <span>{pct.toFixed(0)}%</span>
+      </div>
+      <Progress value={pct} className="h-1.5" />
     </div>
   );
 }
@@ -83,9 +107,6 @@ function StreamSection({
     lastError: string | null;
   };
 }) {
-  const peakPct = Math.min(100, stats.peak * 100);
-  const rmsPct = Math.min(100, stats.rms * 100);
-
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2">
@@ -103,11 +124,14 @@ function StreamSection({
         </Badge>
       </div>
       <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
-        <Row label="Initialize" value={stats.initializeOk ? "OK" : "—"} />
-        <Row label="Start" value={stats.startOk ? "OK" : "—"} />
+        <Row label="Initialize" value={stats.initializeOk ? "OK" : "-"} />
+        <Row label="Start" value={stats.startOk ? "OK" : "-"} />
         <Row label="Packets" value={String(stats.packetsRead)} />
         <Row label="Frames" value={String(stats.framesRead)} />
-        <Row label="Bytes" value={stats.bytesRead > 0 ? `${(stats.bytesRead / 1024).toFixed(1)} KB` : "0"} />
+        <Row
+          label="Bytes"
+          value={stats.bytesRead > 0 ? `${(stats.bytesRead / 1024).toFixed(1)} KB` : "0"}
+        />
         <Row label="Silence/glitch" value={String(stats.silenceCount)} />
         {stats.lastError && (
           <div className="px-4 py-2.5 text-xs text-destructive">{stats.lastError}</div>
@@ -115,22 +139,64 @@ function StreamSection({
       </div>
       {stats.active && (
         <div className="space-y-1.5">
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Peak</span>
-              <span>{peakPct.toFixed(0)}%</span>
-            </div>
-            <Progress value={peakPct} className="h-1.5" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>RMS</span>
-              <span>{rmsPct.toFixed(0)}%</span>
-            </div>
-            <Progress value={rmsPct} className="h-1.5" />
-          </div>
+          <MeterRow label="Peak" value={stats.peak} />
+          <MeterRow label="RMS" value={stats.rms} />
         </div>
       )}
+    </section>
+  );
+}
+
+function SourceCard({
+  channel,
+  source,
+}: {
+  channel: AudappChannelEndpoint;
+  source: MultichannelSourceStatus | null;
+}) {
+  const available = source?.available ?? channel.available;
+  const active = source?.active ?? false;
+  const endpointName = source?.endpointName ?? channel.deviceName ?? "Not found";
+  const inputFormat = source?.inputFormat ?? "Unknown";
+
+  return (
+    <section className="rounded-xl border border-border/70 bg-card px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{channel.label}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{endpointName}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className={cn("text-[10px]", available ? stateColor("running") : stateColor("stopped"))}
+          >
+            {available ? "available" : "missing"}
+          </Badge>
+          <Badge variant="outline" className={cn("text-[10px]", stateColor(active ? "running" : "stopped"))}>
+            {active ? "running" : "idle"}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-background/60 divide-y divide-border/50 text-sm">
+        <Row label="Input format" value={inputFormat} />
+        <Row label="Gain" value={`${source?.gainPercent ?? 100}%`} />
+        <Row label="Muted" value={source?.muted ? "Yes" : "No"} />
+        <Row label="Packets" value={String(source?.stream.packetsRead ?? 0)} />
+        <Row label="Frames" value={String(source?.stream.framesRead ?? 0)} />
+        <Row label="Pending" value={String(source?.pendingFrames ?? 0)} />
+        <Row label="Dropped" value={String(source?.droppedFrames ?? 0)} />
+        <Row label="Discontinuities" value={String(source?.discontinuityCount ?? 0)} />
+        {source?.stream.lastError && (
+          <div className="px-4 py-2.5 text-xs text-destructive">{source.stream.lastError}</div>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <MeterRow label="Peak" value={source?.stream.peak ?? 0} />
+        <MeterRow label="RMS" value={source?.stream.rms ?? 0} />
+      </div>
     </section>
   );
 }
@@ -140,8 +206,15 @@ interface BridgeLabViewProps {
 }
 
 export function BridgeLabView({ audappChannelEndpoints }: BridgeLabViewProps) {
-  const { status, candidates, isLoading, candidatesLoading, error, start, stop, refresh, fetchCandidates } = useAudioBridge();
-  const { status: routing, isLoading: routingLoading, error: routingError, enable: enableRouting, disable: disableRouting } = useRouting();
+  const legacy = useAudioBridge();
+  const multichannel = useMultichannelBridge();
+  const {
+    status: routing,
+    isLoading: routingLoading,
+    error: routingError,
+    enable: enableRouting,
+    disable: disableRouting,
+  } = useRouting();
 
   const [enableLoopback, setEnableLoopback] = useState(true);
   const [enableCapture, setEnableCapture] = useState(true);
@@ -149,16 +222,31 @@ export function BridgeLabView({ audappChannelEndpoints }: BridgeLabViewProps) {
   const [selectedOutputId, setSelectedOutputId] = useState<string | null>(null);
   const [routingOutputId, setRoutingOutputId] = useState<string | null>(null);
 
-  const isRunning = status.state === "running" || status.state === "starting";
+  const legacyRunning = legacy.status.state === "running" || legacy.status.state === "starting";
+  const renderEndpointId = legacy.candidates.audappRender?.id ?? AUDAPP_RENDER_ID;
+  const captureEndpointId = legacy.candidates.audappCapture?.id ?? AUDAPP_CAPTURE_ID;
+  const monitorEndpointId = enableMonitor
+    ? selectedOutputId ?? legacy.candidates.physicalOutputs[0]?.id ?? null
+    : null;
 
-  // Effective endpoint IDs: prefer discovered candidates, fall back to hardcoded Phase 13A IDs
-  const renderEndpointId = candidates.audappRender?.id ?? AUDAPP_RENDER_ID;
-  const captureEndpointId = candidates.audappCapture?.id ?? AUDAPP_CAPTURE_ID;
+  const sourceMap = useMemo(
+    () => new Map(multichannel.status.sources.map((source) => [source.channelId, source])),
+    [multichannel.status.sources],
+  );
 
-  // Effective monitor output: user selection or null (worker will auto-discover non-Audapp)
-  const monitorEndpointId = enableMonitor ? (selectedOutputId ?? candidates.physicalOutputs[0]?.id ?? null) : null;
+  const effectiveRoutingOutputId =
+    routingOutputId ??
+    routing.selectedOutputId ??
+    multichannel.candidates.physicalOutputs[0]?.id ??
+    null;
 
-  function handleStart() {
+  const combinedRoutingError =
+    routing.lastError ??
+    routingError ??
+    multichannel.error ??
+    multichannel.status.lastError;
+
+  function handleLegacyStart() {
     const config: BridgePocConfig = {
       audappRenderEndpointId: renderEndpointId,
       audappCaptureEndpointId: captureEndpointId,
@@ -167,396 +255,527 @@ export function BridgeLabView({ audappChannelEndpoints }: BridgeLabViewProps) {
       enableCaptureEndpointRead: enableCapture,
       enablePhysicalMonitorOutput: enableMonitor,
     };
-    void start(config);
+    void legacy.start(config);
   }
 
-  // Effective routing output: user selection in routing section, or fall back to first candidate
-  const effectiveRoutingOutputId = routingOutputId ?? candidates.physicalOutputs[0]?.id ?? null;
-
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Bridge Lab</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Phase 17A — One-click system routing + manual bridge POC.
+          Phase 21I - always-on multi-channel routing with a legacy Audapp Input
+          diagnostic path below.
         </p>
       </div>
 
       <AudappChannelsStatus
         endpoints={audappChannelEndpoints}
-        description="AudappChannels output endpoints detected by discovery. Per-channel audio routing is not wired yet; the Audapp Input bridge below is unchanged."
+        description="Audapp uses these four Windows AudappChannels render endpoints as simultaneous sources. Audapp Input remains available below for diagnostics only."
       />
 
-      {/* ── Routing Control ── */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <p className="text-xs font-medium text-muted-foreground">System Routing</p>
+      <section className="space-y-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-xs font-medium text-muted-foreground">
+            Always-On Multi-Channel Bridge
+          </p>
+          <Badge variant="outline" className={cn("text-xs", stateColor(routing.bridgeState))}>
+            {routing.bridgeState}
+          </Badge>
           {routing.routingEnabled && (
             <Badge variant="outline" className="text-xs bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30">
               active
             </Badge>
           )}
+          {routing.autoStarted && (
+            <Badge variant="outline" className="text-xs bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30">
+              auto-start
+            </Badge>
+          )}
         </div>
 
         <div className="rounded-xl border border-border bg-card divide-y divide-border/50 text-sm">
-          <div className="px-4 py-3 space-y-0.5">
-            <p className="text-xs text-muted-foreground">Current Windows output</p>
-            <p className="font-mono text-xs">{routing.currentDefaultRenderName ?? "—"}</p>
-          </div>
-          <div className="px-4 py-3 space-y-0.5">
-            <p className="text-xs text-muted-foreground">Audapp virtual input</p>
-            <p className="font-mono text-xs">{routing.audappRenderName ?? "Not found — driver may not be running"}</p>
-          </div>
-          {routing.routingEnabled && routing.selectedOutputName && (
-            <div className="px-4 py-3 space-y-0.5">
-              <p className="text-xs text-muted-foreground">Bridge output</p>
-              <p className="font-mono text-xs">{routing.selectedOutputName}</p>
-            </div>
-          )}
-          {routing.previousDefaultRenderName && !routing.routingEnabled && (
-            <div className="px-4 py-3 space-y-0.5">
-              <p className="text-xs text-muted-foreground">Previous output (restore target)</p>
-              <p className="font-mono text-xs">{routing.previousDefaultRenderName}</p>
-            </div>
+          <Row
+            label="Current Windows output"
+            value={routing.currentDefaultRenderName ?? "-"}
+          />
+          <Row
+            label="Audapp default during routing"
+            value={routing.audappDefaultRenderName ?? "Audapp General not found"}
+          />
+          <Row
+            label="Physical output"
+            value={
+              routing.selectedOutputName ??
+              multichannel.status.monitorOutput.outputName ??
+              "Not selected"
+            }
+          />
+          <Row
+            label="Routing mode"
+            value={
+              routing.bridgeState === "running"
+                ? "Multi-channel active"
+                : routing.bridgeState === "starting"
+                  ? "Multi-channel starting"
+                  : routing.bridgeState === "error"
+                    ? "Multi-channel error"
+                    : "Idle"
+            }
+          />
+          {routing.previousDefaultRenderName && (
+            <Row
+              label="Restore target"
+              value={routing.previousDefaultRenderName}
+            />
           )}
         </div>
 
-        {/* Physical output selector for routing */}
-        {!routing.routingEnabled && candidates.physicalOutputs.length > 0 && (
+        {!routing.routingEnabled && multichannel.candidates.physicalOutputs.length > 0 && (
           <div className="rounded-xl bg-card divide-y divide-border/50">
-            <p className="px-4 py-2.5 text-xs font-medium text-muted-foreground">Route to physical output</p>
-            {candidates.physicalOutputs.map((out) => (
-              <label key={out.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer">
+            <p className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+              Route to physical output
+            </p>
+            {multichannel.candidates.physicalOutputs.map((out) => (
+              <label
+                key={out.id}
+                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer"
+              >
                 <input
                   type="radio"
                   name="routing-output"
                   value={out.id}
-                  checked={(routingOutputId ?? candidates.physicalOutputs[0]?.id) === out.id}
+                  checked={
+                    (routingOutputId ??
+                      routing.selectedOutputId ??
+                      multichannel.candidates.physicalOutputs[0]?.id) === out.id
+                  }
                   onChange={() => setRoutingOutputId(out.id)}
                   className="shrink-0"
                 />
                 <span className="text-sm">{out.name}</span>
                 {out.isDefault && (
-                  <Badge variant="outline" className="text-xs ml-auto">Default</Badge>
+                  <Badge variant="outline" className="text-xs ml-auto">
+                    Default
+                  </Badge>
                 )}
               </label>
             ))}
           </div>
         )}
 
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2">
           {!routing.routingEnabled ? (
             <Button
-              onClick={() => effectiveRoutingOutputId && void enableRouting(effectiveRoutingOutputId)}
-              disabled={routingLoading || !effectiveRoutingOutputId || !routing.audappRenderName}
+              onClick={() =>
+                effectiveRoutingOutputId && void enableRouting(effectiveRoutingOutputId)
+              }
+              disabled={
+                routingLoading ||
+                !effectiveRoutingOutputId ||
+                !routing.audappDefaultRenderName
+              }
             >
               Enable Audapp Routing
             </Button>
           ) : (
-            <Button variant="destructive" onClick={() => void disableRouting()} disabled={routingLoading}>
+            <Button
+              variant="destructive"
+              onClick={() => void disableRouting()}
+              disabled={routingLoading}
+            >
               Disable Audapp Routing
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              void multichannel.refresh();
+              void multichannel.fetchCandidates();
+            }}
+            disabled={multichannel.isLoading || multichannel.candidatesLoading}
+          >
+            Refresh bridge status
+          </Button>
         </div>
 
-        {(routing.lastError ?? routingError) && (
+        {combinedRoutingError && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm">
             <p className="font-medium text-destructive">Routing error</p>
-            <p className="mt-1 text-muted-foreground text-xs">{routing.lastError ?? routingError}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{combinedRoutingError}</p>
             {routing.previousDefaultRenderName && (
-              <p className="mt-1 text-muted-foreground text-xs">
-                Manual recovery: Open Windows Sound settings → set output to <strong>{routing.previousDefaultRenderName}</strong>.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manual recovery: open Windows Sound settings and set output to{" "}
+                <strong>{routing.previousDefaultRenderName}</strong>.
               </p>
             )}
           </div>
         )}
 
         <p className="text-xs text-muted-foreground">
-          System-wide routing only. Per-app routing is not implemented yet.
-          Enable sets Windows default output to Hoparlör (Audapp Input) and starts the bridge.
-          Disable stops the bridge and restores the previous output.
+          Active routing sets the Windows default render endpoint to Audapp General,
+          then mixes General, Music, Game, and Browser simultaneously back to the
+          selected physical output. Internal Audapp channel labels do not move a
+          Windows app by themselves.
         </p>
-      </section>
 
-      <hr className="border-border/50" />
-
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">Manual bridge POC (advanced)</p>
-        <ol className="mt-1 list-decimal list-inside space-y-0.5">
-          <li>Use Enable Audapp Routing above, or set Windows output manually to <strong>Hoparlör (Audapp Input)</strong></li>
-          <li>Play audio in any app (browser, media player)</li>
-          <li>Start Bridge POC — watch render-loopback counters increase</li>
-          <li>Stop when done</li>
-        </ol>
-      </div>
-
-      {/* Discovered endpoints */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-muted-foreground">Discovered Endpoints</p>
-          <Button variant="ghost" size="sm" onClick={() => void fetchCandidates()} disabled={candidatesLoading}>
-            {candidatesLoading ? "Scanning…" : "Rescan"}
-          </Button>
-        </div>
-        <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
-          <Row
-            label="Audapp render (loopback)"
-            value={candidates.audappRender ? candidates.audappRender.name : "Not found"}
-          />
-          {candidates.audappRender?.isDefault && (
-            <div className="px-4 py-1.5 text-xs text-green-600 dark:text-green-400">
-              ✓ System default output — apps route here automatically
-            </div>
-          )}
-          <Row
-            label="Audapp capture"
-            value={candidates.audappCapture ? candidates.audappCapture.name : "Not found"}
-          />
-        </div>
-      </section>
-
-      {/* Config toggles */}
-      <section className="space-y-3">
-        <p className="text-xs font-medium text-muted-foreground">POC Options</p>
-        <div className="rounded-xl bg-card divide-y divide-border/50">
-          <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
-            <div>
-              <p className="text-sm">Render loopback capture</p>
-              <p className="text-xs text-muted-foreground">
-                Tap Audapp Input render stream — counts frames when audio plays
-              </p>
-            </div>
-            <Switch
-              checked={enableLoopback}
-              onCheckedChange={setEnableLoopback}
-              disabled={isRunning}
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
-            <div>
-              <p className="text-sm">Capture endpoint read</p>
-              <p className="text-xs text-muted-foreground">
-                Read Mikrofon (Audapp Input) — likely silent without driver bridge
-              </p>
-            </div>
-            <Switch
-              checked={enableCapture}
-              onCheckedChange={setEnableCapture}
-              disabled={isRunning}
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
-            <div>
-              <p className="text-sm">Physical monitor output</p>
-              <p className="text-xs text-muted-foreground">
-                Route loopback to a physical speaker (may cause echo)
-              </p>
-            </div>
-            <Switch
-              checked={enableMonitor}
-              onCheckedChange={setEnableMonitor}
-              disabled={isRunning}
-            />
-          </label>
-        </div>
-
-        {/* Physical output selector */}
-        {enableMonitor && candidates.physicalOutputs.length > 0 && (
-          <div className="rounded-xl bg-card divide-y divide-border/50">
-            <p className="px-4 py-2.5 text-xs font-medium text-muted-foreground">Output device</p>
-            {candidates.physicalOutputs.map((out) => (
-              <label key={out.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="monitor-output"
-                  value={out.id}
-                  checked={(selectedOutputId ?? candidates.physicalOutputs[0]?.id) === out.id}
-                  onChange={() => setSelectedOutputId(out.id)}
-                  disabled={isRunning}
-                  className="shrink-0"
-                />
-                <span className="text-sm">{out.name}</span>
-                {out.isDefault && (
-                  <Badge variant="outline" className="text-xs ml-auto">Default</Badge>
-                )}
-              </label>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Controls */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          onClick={handleStart}
-          disabled={isRunning || isLoading || (!enableLoopback && !enableCapture)}
-        >
-          Start POC
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => void stop()}
-          disabled={!isRunning || isLoading}
-        >
-          Stop POC
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
-
-      {(error || status.lastError) && (
-        <p className="text-sm text-destructive">{error ?? status.lastError}</p>
-      )}
-
-      {/* Runtime state */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs font-medium text-muted-foreground">Runtime</p>
-          <Badge variant="outline" className={cn("text-xs", stateColor(status.state))}>
-            {status.state}
-          </Badge>
-          {status.running && (
-            <Badge variant="outline" className={cn("text-xs", modeColor(status.mode))}>
-              {modeLabel(status.mode)}
-            </Badge>
-          )}
-        </div>
-
-        {status.mode === "resampled_passthrough" && (
-          <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">Resampled pass-through active</p>
-            <p className="mt-1 text-muted-foreground">
-              Audio from {status.inputFormat ?? "input"} is being resampled to {status.outputFormat ?? "output"} using
-              linear interpolation (ratio {status.resamplerRatio.toFixed(5)}) before routing to the
-              physical output. If frames_rendered increases, audio should be audible.
-            </p>
-          </div>
-        )}
-
-        {status.mode === "format_mismatch" && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">Format mismatch — pass-through disabled</p>
-            <p className="mt-1 text-muted-foreground">
-              Non-float format detected: input ({status.inputFormat ?? "unknown"}) → output (
-              {status.outputFormat ?? "unknown"}). Resampling requires float32 on both ends.
-              Capture counters still increase.
-            </p>
-          </div>
-        )}
-
-        {(status.audappRenderName || status.inputFormat) && (
-          <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
-            {status.audappRenderName && <Row label="Input" value={status.audappRenderName} />}
-            {status.inputFormat && <Row label="Input format" value={status.inputFormat} />}
-            {status.monitorOutputName && <Row label="Output" value={status.monitorOutputName} />}
-            {status.outputFormat && <Row label="Output format" value={status.outputFormat} />}
-            {status.resamplerActive && (
-              <Row label="Resampler ratio" value={status.resamplerRatio.toFixed(5)} />
-            )}
-            {status.startedAt && (
-              <Row label="Started at" value={new Date(status.startedAt).toLocaleTimeString()} />
-            )}
-          </div>
-        )}
-
-        {/* Stability diagnostics — shown when bridge is running with monitor output */}
-        {status.running && status.renderBufferFrames > 0 && (
-          <section className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Stability Diagnostics</p>
-            <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
-              <Row
-                label="Buffer fill"
-                value={`${status.bufferFillMs.toFixed(1)} ms (target ${status.targetBufferMs.toFixed(0)} ms)`}
+        <div className="grid gap-3 lg:grid-cols-2">
+          {CHANNEL_ORDER.map((channelId) => {
+            const endpoint =
+              audappChannelEndpoints.find((item) => item.channelId === channelId) ?? {
+                channelId,
+                label: channelId,
+                available: false,
+                deviceId: null,
+                deviceName: null,
+                state: null,
+              };
+            return (
+              <SourceCard
+                key={channelId}
+                channel={endpoint}
+                source={sourceMap.get(channelId) ?? null}
               />
-              <Row label="Pending frames" value={String(status.pendingFrames)} />
-              <Row label="Dropped frames" value={String(status.droppedFrames)} />
-              <Row label="Render buffer" value={`${status.renderBufferFrames} frames`} />
-              <Row label="Render padding" value={`${status.renderPaddingFrames} frames`} />
-              <Row label="Primed frames" value={String(status.primedFrames)} />
-              <Row label="Discontinuities" value={String(status.captureDiscontinuityCount)} />
-              <Row label="Underruns" value={String(status.monitorOutput.underruns)} />
-            </div>
-          </section>
-        )}
-      </section>
+            );
+          })}
+        </div>
 
-      {/* Stream stats */}
-      {enableLoopback && (
-        <StreamSection title="Render Loopback" stats={status.renderLoopback} />
-      )}
-
-      {enableCapture && (
-        <StreamSection title="Capture Endpoint Read" stats={status.captureRead} />
-      )}
-
-      {/* Monitor output */}
-      {enableMonitor && (
         <section className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Monitor Output</p>
+          <p className="text-xs font-medium text-muted-foreground">Physical Output</p>
           <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
             <Row
               label="Device"
-              value={status.monitorOutputName ?? (status.monitorOutputId ? status.monitorOutputId.slice(0, 36) + "…" : "—")}
+              value={multichannel.status.monitorOutput.outputName ?? "Not active"}
             />
-            <Row label="Initialize" value={status.monitorOutput.initializeOk ? "OK" : "—"} />
-            <Row label="Start" value={status.monitorOutput.startOk ? "OK" : "—"} />
-            <Row label="Frames written" value={String(status.monitorOutput.framesWritten)} />
-            <Row label="Bytes written" value={status.monitorOutput.bytesWritten > 0 ? `${(status.monitorOutput.bytesWritten / 1024).toFixed(1)} KB` : "0"} />
-            <Row label="Underruns" value={String(status.monitorOutput.underruns)} />
-            {status.monitorOutput.lastError && (
-              <div className="px-4 py-2.5 text-xs text-destructive">
-                {status.monitorOutput.lastError}
-              </div>
-            )}
+            <Row
+              label="Format"
+              value={multichannel.status.monitorOutput.outputFormat ?? "Unknown"}
+            />
+            <Row
+              label="Frames written"
+              value={String(multichannel.status.monitorOutput.output.framesWritten)}
+            />
+            <Row
+              label="Bytes written"
+              value={
+                multichannel.status.monitorOutput.output.bytesWritten > 0
+                  ? `${(multichannel.status.monitorOutput.output.bytesWritten / 1024).toFixed(1)} KB`
+                  : "0"
+              }
+            />
+            <Row
+              label="Underruns"
+              value={String(multichannel.status.monitorOutput.output.underruns)}
+            />
+            <Row
+              label="Buffer fill"
+              value={`${multichannel.status.monitorOutput.bufferFillMs.toFixed(1)} ms`}
+            />
           </div>
+          {multichannel.status.running && (
+            <div className="space-y-1.5">
+              <MeterRow label="Post-DSP Peak" value={multichannel.status.postDspPeak} />
+              <MeterRow label="Post-DSP RMS" value={multichannel.status.postDspRms} />
+            </div>
+          )}
         </section>
-      )}
+      </section>
 
-      {/* Post-DSP output meters — shown when bridge is running with physical output */}
-      {status.running && status.monitorOutput.active && (
-        <section className="space-y-2">
+      <details className="group rounded-xl border border-border/70 bg-card/60">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Legacy Audapp Input Bridge</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Diagnostic-only single-source bridge for the legacy Audapp Input
+              endpoint. This is not the primary routing path in Phase 21I.
+            </p>
+          </div>
           <div className="flex items-center gap-2">
-            <p className="text-xs font-medium text-muted-foreground">Master DSP Output</p>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs",
-                status.dspEnabled
-                  ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
-                  : "bg-muted text-muted-foreground border-border",
-              )}
-            >
-              {status.dspEnabled ? "DSP on" : "pass-through"}
+            <Badge variant="outline" className={cn("text-xs", stateColor(legacy.status.state))}>
+              {legacy.status.state}
             </Badge>
           </div>
-          <div className="space-y-1.5">
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Post-DSP Peak</span>
-                <span>{Math.min(100, status.postDspPeak * 100).toFixed(0)}%</span>
-              </div>
-              <Progress value={Math.min(100, status.postDspPeak * 100)} className="h-1.5" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Post-DSP RMS</span>
-                <span>{Math.min(100, status.postDspRms * 100).toFixed(0)}%</span>
-              </div>
-              <Progress value={Math.min(100, status.postDspRms * 100)} className="h-1.5" />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Meters show level after DSP (gain, EQ, limiter). Configure DSP in the{" "}
-            <span className="font-medium text-foreground">Equalizer</span> page.
-          </p>
-        </section>
-      )}
+        </summary>
 
-      <p className="text-xs text-muted-foreground">
-        Render-loopback frames/bytes increase when audio plays through Hoparlör (Audapp Input).
-        Silence/glitch count tracks WASAPI SILENT and DATA_DISCONTINUITY flags.
-      </p>
+        <div className="space-y-5 border-t border-border/60 px-4 py-4">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Manual legacy bridge workflow</p>
+            <ol className="mt-1 list-decimal list-inside space-y-0.5">
+              <li>Set Windows output manually to Audapp Input.</li>
+              <li>Play audio in any app and start the legacy bridge.</li>
+              <li>Use counters below to inspect loopback and capture behavior.</li>
+            </ol>
+          </div>
+
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">
+                Legacy discovered endpoints
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void legacy.fetchCandidates()}
+                disabled={legacy.candidatesLoading}
+              >
+                {legacy.candidatesLoading ? "Scanning..." : "Rescan"}
+              </Button>
+            </div>
+            <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
+              <Row
+                label="Audapp Input render"
+                value={legacy.candidates.audappRender?.name ?? "Not found"}
+              />
+              <Row
+                label="Audapp Input capture"
+                value={legacy.candidates.audappCapture?.name ?? "Not found"}
+              />
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">Legacy POC options</p>
+            <div className="rounded-xl bg-card divide-y divide-border/50">
+              <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
+                <div>
+                  <p className="text-sm">Render loopback capture</p>
+                  <p className="text-xs text-muted-foreground">
+                    Tap the Audapp Input render stream and count live frames.
+                  </p>
+                </div>
+                <Switch
+                  checked={enableLoopback}
+                  onCheckedChange={setEnableLoopback}
+                  disabled={legacyRunning}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
+                <div>
+                  <p className="text-sm">Capture endpoint read</p>
+                  <p className="text-xs text-muted-foreground">
+                    Read the Audapp Input capture endpoint directly.
+                  </p>
+                </div>
+                <Switch
+                  checked={enableCapture}
+                  onCheckedChange={setEnableCapture}
+                  disabled={legacyRunning}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 px-4 py-3 cursor-pointer">
+                <div>
+                  <p className="text-sm">Physical monitor output</p>
+                  <p className="text-xs text-muted-foreground">
+                    Route the legacy loopback stream to a physical speaker.
+                  </p>
+                </div>
+                <Switch
+                  checked={enableMonitor}
+                  onCheckedChange={setEnableMonitor}
+                  disabled={legacyRunning}
+                />
+              </label>
+            </div>
+
+            {enableMonitor && legacy.candidates.physicalOutputs.length > 0 && (
+              <div className="rounded-xl bg-card divide-y divide-border/50">
+                <p className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                  Legacy monitor output
+                </p>
+                {legacy.candidates.physicalOutputs.map((out) => (
+                  <label
+                    key={out.id}
+                    className="flex items-center gap-3 px-4 py-2.5 cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="legacy-output"
+                      value={out.id}
+                      checked={(selectedOutputId ?? legacy.candidates.physicalOutputs[0]?.id) === out.id}
+                      onChange={() => setSelectedOutputId(out.id)}
+                      disabled={legacyRunning}
+                      className="shrink-0"
+                    />
+                    <span className="text-sm">{out.name}</span>
+                    {out.isDefault && (
+                      <Badge variant="outline" className="text-xs ml-auto">
+                        Default
+                      </Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={handleLegacyStart}
+              disabled={legacyRunning || legacy.isLoading || (!enableLoopback && !enableCapture)}
+            >
+              Start legacy bridge
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void legacy.stop()}
+              disabled={!legacyRunning || legacy.isLoading}
+            >
+              Stop legacy bridge
+            </Button>
+            <Button variant="ghost" onClick={() => void legacy.refresh()}>
+              Refresh
+            </Button>
+          </div>
+
+          {(legacy.error || legacy.status.lastError) && (
+            <p className="text-sm text-destructive">
+              {legacy.error ?? legacy.status.lastError}
+            </p>
+          )}
+
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs font-medium text-muted-foreground">Legacy runtime</p>
+              <Badge variant="outline" className={cn("text-xs", stateColor(legacy.status.state))}>
+                {legacy.status.state}
+              </Badge>
+              {legacy.status.running && (
+                <Badge
+                  variant="outline"
+                  className={cn("text-xs", modeColor(legacy.status.mode))}
+                >
+                  {modeLabel(legacy.status.mode)}
+                </Badge>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
+              {legacy.status.audappRenderName && (
+                <Row label="Input" value={legacy.status.audappRenderName} />
+              )}
+              {legacy.status.inputFormat && (
+                <Row label="Input format" value={legacy.status.inputFormat} />
+              )}
+              {legacy.status.monitorOutputName && (
+                <Row label="Output" value={legacy.status.monitorOutputName} />
+              )}
+              {legacy.status.outputFormat && (
+                <Row label="Output format" value={legacy.status.outputFormat} />
+              )}
+              {legacy.status.resamplerActive && (
+                <Row
+                  label="Resampler ratio"
+                  value={legacy.status.resamplerRatio.toFixed(5)}
+                />
+              )}
+              {legacy.status.startedAt && (
+                <Row
+                  label="Started at"
+                  value={new Date(legacy.status.startedAt).toLocaleTimeString()}
+                />
+              )}
+            </div>
+
+            {legacy.status.running && legacy.status.renderBufferFrames > 0 && (
+              <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
+                <Row
+                  label="Buffer fill"
+                  value={`${legacy.status.bufferFillMs.toFixed(1)} ms (target ${legacy.status.targetBufferMs.toFixed(0)} ms)`}
+                />
+                <Row label="Pending frames" value={String(legacy.status.pendingFrames)} />
+                <Row label="Dropped frames" value={String(legacy.status.droppedFrames)} />
+                <Row
+                  label="Render buffer"
+                  value={`${legacy.status.renderBufferFrames} frames`}
+                />
+                <Row
+                  label="Render padding"
+                  value={`${legacy.status.renderPaddingFrames} frames`}
+                />
+                <Row label="Primed frames" value={String(legacy.status.primedFrames)} />
+                <Row
+                  label="Discontinuities"
+                  value={String(legacy.status.captureDiscontinuityCount)}
+                />
+                <Row
+                  label="Underruns"
+                  value={String(legacy.status.monitorOutput.underruns)}
+                />
+              </div>
+            )}
+          </section>
+
+          {enableLoopback && (
+            <StreamSection title="Legacy render loopback" stats={legacy.status.renderLoopback} />
+          )}
+
+          {enableCapture && (
+            <StreamSection title="Legacy capture read" stats={legacy.status.captureRead} />
+          )}
+
+          {enableMonitor && (
+            <section className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Legacy monitor output
+              </p>
+              <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
+                <Row
+                  label="Device"
+                  value={legacy.status.monitorOutputName ?? "Not active"}
+                />
+                <Row
+                  label="Initialize"
+                  value={legacy.status.monitorOutput.initializeOk ? "OK" : "-"}
+                />
+                <Row
+                  label="Start"
+                  value={legacy.status.monitorOutput.startOk ? "OK" : "-"}
+                />
+                <Row
+                  label="Frames written"
+                  value={String(legacy.status.monitorOutput.framesWritten)}
+                />
+                <Row
+                  label="Bytes written"
+                  value={
+                    legacy.status.monitorOutput.bytesWritten > 0
+                      ? `${(legacy.status.monitorOutput.bytesWritten / 1024).toFixed(1)} KB`
+                      : "0"
+                  }
+                />
+                <Row
+                  label="Underruns"
+                  value={String(legacy.status.monitorOutput.underruns)}
+                />
+              </div>
+            </section>
+          )}
+
+          {legacy.status.running && legacy.status.monitorOutput.active && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Legacy post-DSP output
+                </p>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-xs",
+                    legacy.status.dspEnabled
+                      ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                      : "bg-muted text-muted-foreground border-border",
+                  )}
+                >
+                  {legacy.status.dspEnabled ? "DSP on" : "pass-through"}
+                </Badge>
+              </div>
+              <div className="space-y-1.5">
+                <MeterRow label="Post-DSP Peak" value={legacy.status.postDspPeak} />
+                <MeterRow label="Post-DSP RMS" value={legacy.status.postDspRms} />
+              </div>
+            </section>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

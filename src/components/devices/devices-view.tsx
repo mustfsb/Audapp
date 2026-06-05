@@ -40,7 +40,7 @@ export function DevicesView({ devices, isLoading, onRefresh }: DevicesViewProps)
 
       <AudappChannelsStatus
         endpoints={audappChannelEndpoints}
-        description="Internal Audapp output channels mapped to their Windows endpoints."
+        description="Actual Windows AudappChannels endpoints mapped to the four internal Audapp output channels."
       />
 
       <DeviceGroup title="Output" icon={MonitorSpeaker} devices={outputs} />

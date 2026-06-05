@@ -36,11 +36,13 @@ export interface RoutingStatus {
   currentDefaultRenderName: string | null;
   previousDefaultRenderId: string | null;
   previousDefaultRenderName: string | null;
-  audappRenderId: string | null;
-  audappRenderName: string | null;
+  audappDefaultRenderId: string | null;
+  audappDefaultRenderName: string | null;
   selectedOutputId: string | null;
   selectedOutputName: string | null;
   bridgeRunning: boolean;
+  bridgeState: RoutingState;
+  autoStarted: boolean;
   restoreAvailable: boolean;
   lastError: string | null;
 }

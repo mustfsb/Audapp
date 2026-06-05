@@ -14,6 +14,19 @@ export interface BridgeCandidates {
   audappCapture: BridgeCandidate | null;
 }
 
+export interface ChannelBridgeCandidate {
+  channelId: string;
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+export interface MultichannelBridgeCandidates {
+  channelOutputs: ChannelBridgeCandidate[];
+  physicalOutputs: BridgeCandidate[];
+  legacyInput: BridgeCandidate | null;
+}
+
 export interface StreamStats {
   active: boolean;
   initializeOk: boolean;
@@ -35,6 +48,49 @@ export interface OutputStats {
   bytesWritten: number;
   underruns: number;
   lastError: string | null;
+}
+
+export interface MultichannelSourceStatus {
+  channelId: string;
+  endpointId: string | null;
+  endpointName: string | null;
+  inputFormat: string | null;
+  active: boolean;
+  available: boolean;
+  pendingFrames: number;
+  droppedFrames: number;
+  discontinuityCount: number;
+  resamplerActive: boolean;
+  resamplerRatio: number;
+  gainPercent: number;
+  muted: boolean;
+  stream: StreamStats;
+}
+
+export interface MultichannelOutputStatus {
+  outputId: string | null;
+  outputName: string | null;
+  outputFormat: string | null;
+  renderBufferFrames: number;
+  renderPaddingFrames: number;
+  bufferFillMs: number;
+  targetBufferMs: number;
+  primedFrames: number;
+  output: OutputStats;
+}
+
+export interface MultichannelBridgeStatus {
+  running: boolean;
+  state: BridgeState;
+  autoStarted: boolean;
+  sources: MultichannelSourceStatus[];
+  monitorOutput: MultichannelOutputStatus;
+  startedAt: string | null;
+  lastError: string | null;
+  updatedAt: string;
+  dspEnabled: boolean;
+  postDspPeak: number;
+  postDspRms: number;
 }
 
 export interface BridgePocStatus {

@@ -12,11 +12,12 @@ import {
   getSessionChannelSourceLabel,
   type ResolvedInternalChannel,
 } from "@/lib/channel-workflow";
+import { summarizeSessionRoutingHonesty } from "@/lib/session-routing-honesty";
 import { formatRouteApplyStatus } from "@/lib/session-route-status";
 import { sessionDisplayLabel } from "@/lib/discovery-display";
 import { useAudioDsp } from "@/lib/use-audio-dsp";
-import type { AudioChannel, AudioDevice } from "@/types/audio";
-import type { AudioDiscoverySession } from "@/types/discovery";
+import type { AudioChannel } from "@/types/audio";
+import type { AudioDiscoveryDevice, AudioDiscoverySession } from "@/types/discovery";
 import type { SessionRouteCapability, SessionRouteIntent } from "@/types/session-control";
 import type { AudioSessionView } from "@/types/session-view";
 
@@ -30,7 +31,7 @@ interface MixerViewProps {
   routeIntentOptions: Array<{ value: SessionRouteIntent; label: string }>;
   routeCapability: SessionRouteCapability;
   assignmentCountsByChannel: Record<string, number>;
-  outputDevices: AudioDevice[];
+  outputDevices: AudioDiscoveryDevice[];
   soloedChannelIds: ReadonlySet<string>;
   mutedBySoloIds: ReadonlySet<string>;
   isSoloActive: boolean;
@@ -39,7 +40,6 @@ interface MixerViewProps {
   onVolumeCommit: (id: string, value: number) => void;
   onMuteToggle: (id: string, newMuted: boolean) => void;
   onSoloToggle: (id: string) => void;
-  onOutputChange: (id: string, outputDeviceId: string) => void;
   channelErrors: Record<string, string>;
   channelIsPending: (id: string) => boolean;
   settingsError?: string | null;
@@ -59,8 +59,8 @@ export function MixerView(props: MixerViewProps) {
       <div>
         <h1 className="text-xl font-semibold">Mixer</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Internal Audapp channel groups. Mute and volume apply to assigned sessions
-          only.
+          Internal Audapp channel groups. Requested channel grouping is separate from
+          the Windows endpoint each app is actually using.
         </p>
         {!props.routeCapability.perAppSwitchingSupported && (
           <p className="mt-1 text-xs text-muted-foreground">
@@ -79,7 +79,7 @@ export function MixerView(props: MixerViewProps) {
 
       <AudappChannelsStatus
         endpoints={props.audappChannelEndpoints}
-        description="Each channel maps to a Windows AudappChannels endpoint when available. Per-app routing is not active yet."
+        description="Each channel maps to a Windows AudappChannels endpoint when available. Internal assignment alone does not move apps between those Windows endpoints."
       />
 
       {/* Channel strips */}
@@ -190,6 +190,11 @@ export function MixerView(props: MixerViewProps) {
                 ) : (
                   channelSessions.map((session) => {
                     const resolvedChannel = props.resolveChannelForSession(session);
+                    const routingHonesty = summarizeSessionRoutingHonesty(
+                      session,
+                      resolvedChannel,
+                      props.outputDevices,
+                    );
 
                     return (
                       <div
@@ -240,16 +245,29 @@ export function MixerView(props: MixerViewProps) {
                         {session.routeStatus && (
                           <div className="mt-2 space-y-1">
                             <p className="text-[11px] text-muted-foreground">
-                              Apply status: {formatRouteApplyStatus(session.routeStatus.applyStatus)}
+                              Requested Audapp channel: {routingHonesty.requestedChannelLabel}
                             </p>
                             <p className="text-[11px] text-muted-foreground">
-                              Applied endpoint: {session.routeStatus.appliedEndpointName ?? "none"}
+                              Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Apply status: {formatRouteApplyStatus(session.routeStatus.applyStatus)}
                             </p>
                             {session.routeStatus.lastError && (
                               <p className="text-[11px] text-amber-600 dark:text-amber-400">
                                 {session.routeStatus.lastError}
                               </p>
                             )}
+                          </div>
+                        )}
+                        {!session.routeStatus && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[11px] text-muted-foreground">
+                              Requested Audapp channel: {routingHonesty.requestedChannelLabel}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
+                            </p>
                           </div>
                         )}
                       </div>
