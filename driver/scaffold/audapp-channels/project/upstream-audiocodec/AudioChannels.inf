@@ -1,0 +1,241 @@
+/*++
+;
+; Audapp Channels — experimental separate-root multi-endpoint virtual audio
+; driver (Phase 21F, compile-only).
+;
+; Audapp-owned INF. Separate package identity from BOTH shipping/experimental
+; packages:
+;   - "Audapp Input"  (ROOT\AudappInput, service AudioCodec, oem19.inf)  -- LIVE, do not touch
+;   - "Audapp Multi"  (ROOT\AudappMulti, service AudioMulti)             -- 21C/21D experiment
+; This INF must never match either of the above.
+;
+; Architecture (Phase 21E plan): FOUR separate root devnodes, one render
+; endpoint each. Windows 10 ACX 1.0 AudioEndpointBuilder derives each render
+; endpoint's display name from its parent devnode's DeviceDesc, so four distinct
+; DeviceDesc values yield four distinct, persistent endpoint names:
+;   ROOT\AudappGeneral -> "Audapp General"
+;   ROOT\AudappMusic   -> "Audapp Music"
+;   ROOT\AudappGame    -> "Audapp Game"
+;   ROOT\AudappBrowser -> "Audapp Browser"
+;
+; All four devnodes share ONE service/binary (AudappChannels / AudappChannels.sys).
+; Each devnode creates exactly ONE render circuit; the channel is selected by the
+; driver at EvtDeviceAdd from the per-device HW-key value AudappChannel (written
+; below per model section). RENDER-ONLY: no capture/microphone interface.
+;
+; COMPILE-ONLY. Not for install on a primary machine. VM-only install is a later
+; phase (21G) and is out of scope here.
+;
+;--*/
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=MEDIA
+ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%ProviderName%
+DriverVer=06/05/2026, 1.0.0.0
+CatalogFile=AudappChannels.cat
+PnpLockDown=1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+;*****************************************
+; Audapp Channels Device Install Sections
+;*****************************************
+
+[Manufacturer]
+%StdMfg%=Standard,NT$ARCH$.10.0...19041
+
+; Four root devnodes, one per Audapp render endpoint. Each maps a distinct
+; hardware ID to a distinct DeviceDesc (the user-visible endpoint name) and a
+; distinct install section, but all share the AudappChannels service/binary.
+[Standard.NT$ARCH$.10.0...19041]
+%Audapp.General.DeviceDesc%=Audapp_General, ROOT\AudappGeneral
+%Audapp.Music.DeviceDesc%  =Audapp_Music,   ROOT\AudappMusic
+%Audapp.Game.DeviceDesc%   =Audapp_Game,    ROOT\AudappGame
+%Audapp.Browser.DeviceDesc%=Audapp_Browser, ROOT\AudappBrowser
+
+;-------------- Shared sub-sections (referenced by every model section)
+
+[Audio_Device.NT.Copy]
+AudappChannels.sys
+
+[Audio_Service_Inst]
+DisplayName    = %AudappChannels.SvcDesc%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\AudappChannels.sys
+
+[Audio_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[SourceDisksNames]
+1 = %DiskId1%,,,""
+
+[SourceDisksFiles]
+AudappChannels.sys  = 1,,
+
+;=========================================================================
+; Audapp General  (ROOT\AudappGeneral -> "Audapp General")
+;=========================================================================
+[Audapp_General.NT]
+CopyFiles=Audio_Device.NT.Copy
+
+[Audapp_General.NT.HW]
+AddReg=Audapp_General.NT.HW.AddReg
+[Audapp_General.NT.HW.AddReg]
+HKR,,AudappChannel,,"general"
+
+[Audapp_General.NT.Services]
+AddService = AudappChannels, %SPSVCINST_ASSOCSERVICE%, Audio_Service_Inst
+
+[Audapp_General.NT.Wdf]
+KmdfService = AudappChannels, Audio_wdfsect
+
+[Audapp_General.I.Speaker]
+AddReg=Audapp_General.I.Speaker.AddReg
+[Audapp_General.I.Speaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audapp.General.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audapp_General.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerGeneral%, Audapp_General.I.Speaker
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerGeneral%, Audapp_General.I.Speaker
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerGeneral%, Audapp_General.I.Speaker
+
+;=========================================================================
+; Audapp Music  (ROOT\AudappMusic -> "Audapp Music")
+;=========================================================================
+[Audapp_Music.NT]
+CopyFiles=Audio_Device.NT.Copy
+
+[Audapp_Music.NT.HW]
+AddReg=Audapp_Music.NT.HW.AddReg
+[Audapp_Music.NT.HW.AddReg]
+HKR,,AudappChannel,,"music"
+
+[Audapp_Music.NT.Services]
+AddService = AudappChannels, %SPSVCINST_ASSOCSERVICE%, Audio_Service_Inst
+
+[Audapp_Music.NT.Wdf]
+KmdfService = AudappChannels, Audio_wdfsect
+
+[Audapp_Music.I.Speaker]
+AddReg=Audapp_Music.I.Speaker.AddReg
+[Audapp_Music.I.Speaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audapp.Music.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audapp_Music.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerMusic%, Audapp_Music.I.Speaker
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerMusic%, Audapp_Music.I.Speaker
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerMusic%, Audapp_Music.I.Speaker
+
+;=========================================================================
+; Audapp Game  (ROOT\AudappGame -> "Audapp Game")
+;=========================================================================
+[Audapp_Game.NT]
+CopyFiles=Audio_Device.NT.Copy
+
+[Audapp_Game.NT.HW]
+AddReg=Audapp_Game.NT.HW.AddReg
+[Audapp_Game.NT.HW.AddReg]
+HKR,,AudappChannel,,"game"
+
+[Audapp_Game.NT.Services]
+AddService = AudappChannels, %SPSVCINST_ASSOCSERVICE%, Audio_Service_Inst
+
+[Audapp_Game.NT.Wdf]
+KmdfService = AudappChannels, Audio_wdfsect
+
+[Audapp_Game.I.Speaker]
+AddReg=Audapp_Game.I.Speaker.AddReg
+[Audapp_Game.I.Speaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audapp.Game.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audapp_Game.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerGame%, Audapp_Game.I.Speaker
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerGame%, Audapp_Game.I.Speaker
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerGame%, Audapp_Game.I.Speaker
+
+;=========================================================================
+; Audapp Browser  (ROOT\AudappBrowser -> "Audapp Browser")
+;=========================================================================
+[Audapp_Browser.NT]
+CopyFiles=Audio_Device.NT.Copy
+
+[Audapp_Browser.NT.HW]
+AddReg=Audapp_Browser.NT.HW.AddReg
+[Audapp_Browser.NT.HW.AddReg]
+HKR,,AudappChannel,,"browser"
+
+[Audapp_Browser.NT.Services]
+AddService = AudappChannels, %SPSVCINST_ASSOCSERVICE%, Audio_Service_Inst
+
+[Audapp_Browser.NT.Wdf]
+KmdfService = AudappChannels, Audio_wdfsect
+
+[Audapp_Browser.I.Speaker]
+AddReg=Audapp_Browser.I.Speaker.AddReg
+[Audapp_Browser.I.Speaker.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%Audapp.Browser.szPname%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEndpoint_Supports_EventDriven_Mode%,0x00010001,0x1
+
+[Audapp_Browser.NT.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,    %KSNAME_SpeakerBrowser%, Audapp_Browser.I.Speaker
+AddInterface=%KSCATEGORY_RENDER%,   %KSNAME_SpeakerBrowser%, Audapp_Browser.I.Speaker
+AddInterface=%KSCATEGORY_REALTIME%, %KSNAME_SpeakerBrowser%, Audapp_Browser.I.Speaker
+
+[Strings]
+;
+;Non-localizable
+;
+; Render circuit reference strings — MUST match Channels.h circuit names exactly.
+KSNAME_SpeakerGeneral="SpeakerGeneral"
+KSNAME_SpeakerMusic="SpeakerMusic"
+KSNAME_SpeakerGame="SpeakerGame"
+KSNAME_SpeakerBrowser="SpeakerBrowser"
+
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ProviderName = "Audapp"
+
+Proxy.CLSID         = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO    = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER   = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME = "{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+
+KSNODETYPE_ANY      = "{00000000-0000-0000-0000-000000000000}"
+
+PKEY_AudioEndpoint_Association               = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
+PKEY_AudioEndpoint_Supports_EventDriven_Mode = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},7"
+
+;
+;Localizable
+;
+StdMfg = "Audapp"
+DiskId1 = "Audapp Channels Installation Disk"
+AudappChannels.SvcDesc = "Audapp Channels"
+
+;; Per-devnode DeviceDesc values — these become the user-visible Windows endpoint
+;; names (AudioEndpointBuilder uses the parent devnode DeviceDesc).
+Audapp.General.DeviceDesc = "Audapp General"
+Audapp.Music.DeviceDesc   = "Audapp Music"
+Audapp.Game.DeviceDesc    = "Audapp Game"
+Audapp.Browser.DeviceDesc = "Audapp Browser"
+
+;; KS interface FriendlyNames (kept consistent with the DeviceDesc values).
+Audapp.General.szPname = "Audapp General"
+Audapp.Music.szPname   = "Audapp Music"
+Audapp.Game.szPname    = "Audapp Game"
+Audapp.Browser.szPname = "Audapp Browser"
