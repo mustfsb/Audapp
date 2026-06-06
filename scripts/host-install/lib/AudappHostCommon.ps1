@@ -65,7 +65,7 @@ function Get-AudappHostConfig {
         ForbiddenNames       = @('Audapp Input', 'Audapp Multi', 'AudioMulti')
         ForbiddenServices    = @('AudioCodec', 'AudioMulti')
         ForbiddenInfNames    = @('audiocodec.inf', 'audiomulti.inf')
-        ProtectedOemPackages = @('oem19.inf', 'oem20.inf', 'oem21.inf')
+        ProtectedOemPackages = @('oem19.inf')
         LogDirectory         = Join-Path $env:USERPROFILE 'Documents\Audapp\host-install-logs'
     }
 }

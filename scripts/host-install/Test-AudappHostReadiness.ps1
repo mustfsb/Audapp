@@ -229,6 +229,9 @@ Write-ReadinessValue -Label 'AudappChannels devnodes' -Value ("count={0}; {1}" -
 $payloadFiles = @(Get-AudappPayloadFiles -PayloadPath $PayloadPath)
 foreach ($payloadFile in $payloadFiles) {
     Write-ReadinessValue -Label ("Payload file {0}" -f $payloadFile.Name) -Value ("exists={0}; path={1}" -f $payloadFile.Exists, $payloadFile.Path) -Log $log
+    if ($ValidateInstallReadiness -and -not $payloadFile.Exists -and $payloadFile.Name -ne $cfg.InfFileName) {
+        Add-ReadinessBlocker -Message ("Required payload file is missing: {0}" -f $payloadFile.Path) -Log $log
+    }
 }
 
 $infPath = Join-Path $PayloadPath $cfg.InfFileName

@@ -15,7 +15,7 @@ function Initialize-AudappPolicyConfigInterop {
     [CmdletBinding()]
     param()
 
-    if ('AudappHost.IPolicyConfig' -as [type]) {
+    if ('AudappHostInterop.PolicyConfigHelper' -as [type]) {
         return
     }
 
@@ -23,25 +23,45 @@ function Initialize-AudappPolicyConfigInterop {
 using System;
 using System.Runtime.InteropServices;
 
-namespace AudappHost {
+namespace AudappHostInterop {
   [ComImport, Guid("f8679f50-850a-41cf-9c72-430f290290c8"),
    InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IPolicyConfig {
-    int GetMixFormat(IntPtr deviceName, IntPtr format);
-    int GetDeviceFormat(IntPtr deviceName, int defaultOnly, IntPtr format);
-    int SetDeviceFormat(IntPtr deviceName, IntPtr endpointFormat, IntPtr mixFormat);
-    int GetProcessingPeriod(IntPtr deviceName, int defaultOnly, IntPtr defaultPeriod, IntPtr minimumPeriod);
-    int SetProcessingPeriod(IntPtr deviceName, IntPtr processingPeriod);
-    int GetShareMode(IntPtr deviceName, IntPtr mode);
-    int SetShareMode(IntPtr deviceName, IntPtr mode);
-    int GetPropertyValue(IntPtr deviceName, IntPtr key, IntPtr value);
-    int SetPropertyValue(IntPtr deviceName, IntPtr key, IntPtr value);
-    int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int role);
-    int SetEndpointVisibility([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int visible);
+    int GetMixFormat(IntPtr wszDeviceId, out IntPtr ppwfxFormat);
+    int GetDeviceFormat(IntPtr wszDeviceId, int dwFlags, out IntPtr ppwfxFormat);
+    int ResetDeviceFormat(IntPtr wszDeviceId);
+    int SetDeviceFormat(IntPtr wszDeviceId, IntPtr pwfxFormat, IntPtr pwfxFormatReq);
+    int GetProcessingPeriod(IntPtr wszDeviceId, int dwFlags, out long phnsDefaultPeriod, out long phnsMinimumPeriod);
+    int SetProcessingPeriod(IntPtr wszDeviceId, long hnsPeriod);
+    int GetShareMode(IntPtr wszDeviceId, out IntPtr pShareMode);
+    int SetShareMode(IntPtr wszDeviceId, IntPtr pShareMode);
+    int GetPropertyValue(IntPtr wszDeviceId, IntPtr key, IntPtr pv);
+    int SetEndpointVisibility(IntPtr wszDeviceId, int bVisible);
+    int SetDefaultEndpoint(IntPtr wszDeviceId, int eRole);
   }
 
   [ComImport, Guid("870af99c-171d-4f9e-af0d-e63df40c2bc9")]
   public class PolicyConfigClient {
+  }
+
+  public static class PolicyConfigHelper {
+    public static int SetDefaultEndpointAllRoles(string deviceId) {
+      IntPtr pDeviceId = Marshal.StringToCoTaskMemUni(deviceId);
+      try {
+        IPolicyConfig policy = (IPolicyConfig)(new PolicyConfigClient());
+        for (int role = 0; role < 3; role++) {
+          int hr = policy.SetDefaultEndpoint(pDeviceId, role);
+          if (hr != 0) {
+            return hr;
+          }
+        }
+        return 0;
+      } finally {
+        if (pDeviceId != IntPtr.Zero) {
+          Marshal.FreeCoTaskMem(pDeviceId);
+        }
+      }
+    }
   }
 }
 '@ -ErrorAction Stop
@@ -54,13 +74,9 @@ function Set-AudappDefaultRenderEndpointInternal {
     )
 
     Initialize-AudappPolicyConfigInterop
-    $client = New-Object AudappHost.PolicyConfigClient
-    $policy = [AudappHost.IPolicyConfig]$client
-    foreach ($role in 0, 1, 2) {
-        $hr = $policy.SetDefaultEndpoint($DeviceId, $role)
-        if ($hr -ne 0) {
-            throw ("SetDefaultEndpoint failed for role {0} with hr=0x{1:X8}" -f $role, ([uint32]$hr))
-        }
+    $hr = [AudappHostInterop.PolicyConfigHelper]::SetDefaultEndpointAllRoles($DeviceId)
+    if ($hr -ne 0) {
+        throw ("SetDefaultEndpoint failed with hr=0x{0:X8}" -f ([uint32]$hr))
     }
 }
 
