@@ -55,3 +55,6 @@ driver/scaffold/audapp-input/**/*.inf
 driver/scaffold/audapp-input/**/x64/
 driver/scaffold/audapp-input/**/Debug/
 driver/scaffold/audapp-input/**/Release/
+scripts/host-install/payload/
+scripts/host-install/bin/*.exe
+scripts/host-install/logs/
