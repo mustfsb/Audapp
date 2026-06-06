@@ -8,6 +8,7 @@ import {
   getAudappEndpointClass,
   summarizeAudappChannelEndpoints,
 } from "@/lib/audapp-endpoints";
+import { statusBadgeVariant } from "@/lib/badge-variant";
 import { deviceStateLabel } from "@/lib/discovery-display";
 import { cn } from "@/lib/utils";
 import type { AudioDiscoveryDevice } from "@/types/discovery";
@@ -56,20 +57,18 @@ function AudappEndpointBadge({ device }: { device: AudioDiscoveryDevice }) {
     return null;
   }
 
-  const isLegacy = endpointClass.kind === "legacy_multi";
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "h-5 px-1.5 text-xs",
-        isLegacy
-          ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
-          : "border-blue-500/30 text-blue-600 dark:text-blue-400",
-      )}
-    >
-      {isLegacy ? `${label} (stale)` : `Audapp ${label}`}
-    </Badge>
-  );
+  // Audapp Input and the old multi endpoint are legacy/diagnostic now that the
+  // product runs on the four AudappChannels outputs.
+  switch (endpointClass.kind) {
+    case "channel_output":
+      return <Badge variant={statusBadgeVariant("info")}>Audapp {label}</Badge>;
+    case "input":
+      return <Badge variant={statusBadgeVariant("legacy")}>Legacy</Badge>;
+    case "legacy_multi":
+      return <Badge variant={statusBadgeVariant("legacy")}>Legacy (stale)</Badge>;
+    default:
+      return <Badge variant={statusBadgeVariant("neutral")}>Audapp</Badge>;
+  }
 }
 
 function DeviceGroup({
@@ -98,15 +97,9 @@ function DeviceGroup({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <AudappEndpointBadge device={device} />
-                {device.isDefault && <Badge className="text-xs h-5 px-1.5">Default</Badge>}
+                {device.isDefault && <Badge variant={statusBadgeVariant("info")}>Default</Badge>}
                 <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs h-5 px-1.5",
-                    device.state === "active"
-                      ? "border-green-500/30 text-green-600 dark:text-green-400"
-                      : "text-muted-foreground",
-                  )}
+                  variant={statusBadgeVariant(device.state === "active" ? "ok" : "neutral")}
                 >
                   {deviceStateLabel(device.state)}
                 </Badge>

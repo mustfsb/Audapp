@@ -9,8 +9,9 @@ mod types;
 mod worker;
 
 pub use endpoints::{
-    is_audapp_endpoint_name, is_legacy_input_name, require_multichannel_endpoints,
-    resolve_audapp_render_endpoints, EndpointResolutionError, RenderEndpointInfo,
+    is_active_physical_output, is_audapp_endpoint_name, is_audapp_render_device,
+    is_legacy_input_name, require_multichannel_endpoints, resolve_audapp_render_endpoints,
+    resolve_physical_output_candidate, EndpointResolutionError, RenderEndpointInfo,
     ResolvedAudappRenderEndpoints,
 };
 pub use manager::{

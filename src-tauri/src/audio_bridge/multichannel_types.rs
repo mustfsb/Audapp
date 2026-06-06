@@ -62,9 +62,18 @@ impl MultichannelSourceStatus {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultichannelOutputStatus {
+    /// The physical (non-Audapp) render endpoint the bridge mix is sent to.
     pub output_id: Option<String>,
     pub output_name: Option<String>,
     pub output_format: Option<String>,
+    /// The current Windows default render endpoint (which may legitimately be an
+    /// Audapp endpoint during routing). Exposed so the UI can show physical-output
+    /// vs Windows-default honestly.
+    pub default_render_id: Option<String>,
+    pub default_render_name: Option<String>,
+    /// True only if the resolved physical output is (wrongly) an Audapp endpoint.
+    /// This must always be false in a healthy bridge; true indicates a bug.
+    pub is_physical_output_audapp: bool,
     pub render_buffer_frames: u32,
     pub render_padding_frames: u64,
     pub buffer_fill_ms: f64,

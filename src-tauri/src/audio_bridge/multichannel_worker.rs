@@ -252,12 +252,27 @@ fn run_multichannel_bridge_worker_windows(args: MultichannelWorkerArgs) {
         }
     }
 
+    let (default_render_id, default_render_name) = read_default_render(&enumerator);
+    let physical_output_is_audapp =
+        crate::audio::classify_audapp_endpoint(&monitor.output_name).is_audapp_endpoint;
+
     {
         let mut status = args.shared_status.lock().unwrap_or_else(|p| p.into_inner());
         status.monitor_output.output_id = Some(monitor.output_id.clone());
         status.monitor_output.output_name = Some(monitor.output_name.clone());
         status.monitor_output.output_format = Some(monitor.output_format.clone());
+        status.monitor_output.default_render_id = default_render_id.clone();
+        status.monitor_output.default_render_name = default_render_name.clone();
+        status.monitor_output.is_physical_output_audapp = physical_output_is_audapp;
         status.monitor_output.output.initialize_ok = true;
+        if physical_output_is_audapp {
+            // Should be impossible after the physical-output resolver, but surface it
+            // loudly rather than rendering silently into a virtual sink.
+            status.last_error = Some(format!(
+                "Bridge render output resolved to an Audapp endpoint ({}); refusing to treat it as a physical output.",
+                monitor.output_name
+            ));
+        }
         for source in &sources {
             update_source_status(&mut status.sources, source, true, false);
         }
@@ -672,6 +687,22 @@ fn open_by_id(
 ) -> Option<windows::Win32::Media::Audio::IMMDevice> {
     let hid = windows::core::HSTRING::from(id);
     unsafe { enumerator.GetDevice(&hid).ok() }
+}
+
+/// Read the current Windows default render endpoint (id + friendly name) for
+/// honest status reporting. Returns (None, None) when no default is available.
+#[cfg(windows)]
+fn read_default_render(
+    enumerator: &windows::Win32::Media::Audio::IMMDeviceEnumerator,
+) -> (Option<String>, Option<String>) {
+    use windows::Win32::Media::Audio::{eMultimedia, eRender};
+    match unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia) } {
+        Ok(device) => {
+            let name = get_friendly_name(&device);
+            (get_device_id(&device), Some(name).filter(|n| !n.is_empty()))
+        }
+        Err(_) => (None, None),
+    }
 }
 
 #[cfg(windows)]

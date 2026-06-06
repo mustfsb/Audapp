@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  dropAssignmentsForSession,
+  selectAssignmentForSession,
+  upsertAssignmentLocally,
+} from "@/lib/channel-assignment-match";
 import { assignmentMatchFromSession } from "@/lib/session-target";
 import { invokeCommand, isTauriRuntime } from "@/lib/tauri";
 import type { AudioDiscoverySession } from "@/types/discovery";
@@ -8,66 +13,6 @@ import type {
   RemoveChannelAssignmentInput,
   SetChannelAssignmentInput,
 } from "@/types/session-control";
-
-function assignmentMatchScore(
-  assignment: ChannelAssignment,
-  session: AudioDiscoverySession,
-): number {
-  const rule = assignment.match;
-
-  if (
-    rule.executablePath &&
-    session.executablePath &&
-    rule.executablePath.localeCompare(session.executablePath, undefined, {
-      sensitivity: "accent",
-    }) === 0
-  ) {
-    return 4;
-  }
-
-  if (
-    rule.processName &&
-    session.processName &&
-    rule.processName.localeCompare(session.processName, undefined, {
-      sensitivity: "accent",
-    }) === 0
-  ) {
-    return 3;
-  }
-
-  if (
-    rule.sessionDisplayName &&
-    rule.sessionDisplayName.localeCompare(session.displayName, undefined, {
-      sensitivity: "accent",
-    }) === 0
-  ) {
-    return 2;
-  }
-
-  if (rule.processId !== undefined && rule.processId !== null && rule.processId === session.processId) {
-    return 1;
-  }
-
-  return 0;
-}
-
-function selectAssignmentForSession(
-  assignments: ChannelAssignment[],
-  session: AudioDiscoverySession,
-): ChannelAssignment | null {
-  let best: ChannelAssignment | null = null;
-  let bestScore = 0;
-
-  for (const assignment of assignments) {
-    const score = assignmentMatchScore(assignment, session);
-    if (score > bestScore) {
-      best = assignment;
-      bestScore = score;
-    }
-  }
-
-  return best;
-}
 
 export function useChannelAssignments() {
   const [assignments, setAssignments] = useState<ChannelAssignment[]>([]);
@@ -115,24 +60,39 @@ export function useChannelAssignments() {
         return null;
       }
 
-      const input: SetChannelAssignmentInput = {
+      const match = assignmentMatchFromSession(session);
+      const input: SetChannelAssignmentInput = { channelId, match, label };
+
+      // Optimistically reflect the manual override immediately so the Apps dropdown
+      // updates and the requested channel wins over the rule/smart-default the moment
+      // the user picks it — independent of the backend round-trip latency. Drop any
+      // stale assignment for this app first so the new choice is the only match.
+      const now = new Date().toISOString();
+      const optimistic: ChannelAssignment = {
+        id: `optimistic-${now}`,
         channelId,
-        match: assignmentMatchFromSession(session),
+        match,
         label,
+        createdAt: now,
+        updatedAt: now,
       };
+      setAssignments((current) => [...dropAssignmentsForSession(current, session), optimistic]);
 
       try {
         const saved = await invokeCommand<ChannelAssignment>(
           "set_channel_assignment",
           { input },
         );
-        await refresh();
+        // Reconcile the optimistic entry with the persisted one (real id/timestamps).
+        setAssignments((current) => upsertAssignmentLocally(current, saved));
         setError(null);
         return saved;
       } catch (cause) {
         const message =
           cause instanceof Error ? cause.message : "Failed to save channel assignment.";
         setError(message);
+        // Roll back the optimistic change to the persisted truth.
+        await refresh();
         return null;
       }
     },

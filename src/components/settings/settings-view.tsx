@@ -17,16 +17,20 @@ interface SettingsViewProps {
   settings: AppSettings;
   engineStatus: EngineStatus;
   appVersion: string;
+  developerMode: boolean;
   onToggle: (key: "startupBehavior" | "trayBehavior" | "telemetryEnabled", value: boolean) => void;
   onLatencyModeChange: (value: LatencyMode) => void;
+  onToggleDeveloperMode: (value: boolean) => void;
 }
 
 export function SettingsView({
   settings,
   engineStatus,
   appVersion,
+  developerMode,
   onToggle,
   onLatencyModeChange,
+  onToggleDeveloperMode,
 }: SettingsViewProps) {
   return (
     <div className="max-w-2xl space-y-5">
@@ -98,6 +102,20 @@ export function SettingsView({
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">Advanced</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SettingToggle
+            title="Developer mode"
+            description="Show engine, routing, and bridge diagnostics in the sidebar."
+            checked={developerMode}
+            onCheckedChange={onToggleDeveloperMode}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

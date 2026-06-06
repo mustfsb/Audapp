@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::audio::{capture_discovery_snapshot, AudioDiscoveryDevice};
 use crate::audio_bridge::endpoints::{
-    find_active_output_device_by_id, physical_output_endpoints_from_devices, require_multichannel_endpoints,
-    resolve_audapp_render_endpoints_from_devices,
+    find_active_output_device_by_id, physical_output_endpoints_from_devices,
+    require_multichannel_endpoints, resolve_audapp_render_endpoints_from_devices,
+    resolve_physical_output_candidate,
 };
 use crate::audio_bridge::multichannel_types::{
     ChannelBridgeCandidate, MultichannelBridgeCandidates, MultichannelBridgeConfig,
@@ -227,17 +228,13 @@ pub fn resolve_multichannel_start_from_devices(
             crate::audio_bridge::EndpointResolutionError::MissingChannel(channel_id) => channel_id,
         }))?;
 
-    let physical_outputs = physical_output_endpoints_from_devices(devices);
     let output = if let Some(device_id) = preferred_output_id {
         find_active_output_device_by_id(devices, device_id)
             .ok_or_else(|| "Selected physical output is not an active non-Audapp endpoint.".to_string())?
     } else {
-        physical_outputs
-            .iter()
-            .find(|device| device.is_default)
-            .cloned()
-            .or_else(|| physical_outputs.first().cloned())
-            .ok_or_else(|| "No active physical output endpoint found.".to_string())?
+        // No explicit selection: resolve the first active non-Audapp render endpoint.
+        // The bridge mix must never be rendered to an Audapp endpoint.
+        resolve_physical_output_candidate(devices, None, None, None)?
     };
 
     let general = resolved

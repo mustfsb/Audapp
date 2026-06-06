@@ -12,8 +12,13 @@ const badgeVariants = cva(
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/90",
         secondary:
           "bg-muted text-foreground [a]:hover:bg-muted/80",
+        // Filled semantic variants — use these for primary product status so a
+        // state is never communicated by a transparent outline alone.
+        success: "bg-green-600 text-white [a]:hover:bg-green-600/90",
+        warning: "bg-amber-500 text-amber-950 [a]:hover:bg-amber-500/90",
+        info: "bg-blue-600 text-white [a]:hover:bg-blue-600/90",
         destructive:
-          "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
+          "bg-destructive text-white focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/90",
         outline:
           "border-border bg-background text-foreground [a]:hover:bg-muted [a]:hover:text-foreground",
         ghost:

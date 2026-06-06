@@ -188,7 +188,7 @@ export function NoiseView() {
   return (
     <div className="max-w-lg space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">Voice Lab</h1>
+        <h1 className="text-xl font-semibold">Noise Suppression</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">
           Microphone capture and voice processing.
         </p>
@@ -198,9 +198,9 @@ export function NoiseView() {
       <div className="flex items-start gap-2.5 rounded-xl bg-muted/40 px-4 py-3">
         <Mic2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Lab mode.</span>{" "}
-          This captures and processes mic audio locally. Processed virtual microphone output to
-          apps (Discord, Teams, Zoom) is pending future work.
+          <span className="font-medium text-foreground">Preview.</span>{" "}
+          This captures and processes mic audio locally. Sending the processed microphone to
+          apps (Discord, Teams, Zoom) is coming in a future update.
         </div>
       </div>
 

@@ -440,11 +440,21 @@ export function BridgeLabView({ audappChannelEndpoints }: BridgeLabViewProps) {
         </div>
 
         <section className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Physical Output</p>
+          <p className="text-xs font-medium text-muted-foreground">Render Output (physical)</p>
+          {multichannel.status.monitorOutput.isPhysicalOutputAudapp && (
+            <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+              Render output resolved to an Audapp endpoint — this is a bug; audio would be
+              silent. Expected a physical device such as High Definition Audio Device.
+            </p>
+          )}
           <div className="rounded-xl bg-card divide-y divide-border/50 text-sm">
             <Row
-              label="Device"
+              label="Render device"
               value={multichannel.status.monitorOutput.outputName ?? "Not active"}
+            />
+            <Row
+              label="Windows default"
+              value={multichannel.status.monitorOutput.defaultRenderName ?? "Unknown"}
             />
             <Row
               label="Format"

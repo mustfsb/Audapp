@@ -38,7 +38,7 @@ export function EqualizerView() {
       <DspControls
         dsp={dsp}
         showInputGain={false}
-        footerNote="DSP is applied to the mixed Audapp bridge output. Master gain and EQ affect all audio passing through the Audapp routing path. Enable DSP and start Audapp Routing in Bridge Lab to hear changes."
+        footerNote="DSP is applied to the mixed Audapp output. Master gain and EQ affect all audio passing through Audapp. Enable DSP and start routing on the Audio Routing page to hear changes."
       />
     </div>
   );

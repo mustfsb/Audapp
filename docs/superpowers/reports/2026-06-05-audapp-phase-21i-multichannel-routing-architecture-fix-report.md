@@ -184,3 +184,106 @@ especially for:
 - No driver install / remove / mutation commands were used.
 - No `pnputil`, `devcon`, `devgen`, or INF changes were performed.
 - Existing `Audapp Input` was preserved as a legacy diagnostic path.
+
+---
+
+# Phase 21I — Pass 2 Runtime Fix (2026-06-05)
+
+Pass 1 built/tested clean, but live smoke surfaced two runtime bugs. Pass 2 hardens the
+render-output path and the manual per-app assignment path. Work done on `main`; nothing
+committed/pushed. App-side Rust/Tauri + frontend only; no driver mutation.
+
+## Preflight (read-only)
+
+- Branch `main`, clean tree (only untracked reports/specs). AudappChannels 4 devnodes
+  `ProblemCode 0` (Service `AudappChannels`); Audapp Input `ProblemCode 0`, `oem19.inf`.
+- `Get-PnpDevice -Class AudioEndpoint`: the **only** non-Audapp render endpoint is
+  `Hoparlör (High Definition Audio Device)`.
+- `audapp_session_probe`: only live session was `System Sounds` on the Audapp Input device
+  id — confirming the current Windows default render is **Audapp Input**.
+
+## Bug 1 — no audible output unless default is Audapp Browser
+
+Root causes (code-level):
+
+1. **No robust physical-output resolver.** Output was chosen by
+   `physical_outputs.find(is_default).or(first())` — no priority, no fail-closed, Audapp
+   exclusion by friendly name only. On this box (default = Audapp Input) it fell back to an
+   arbitrary `first()`.
+2. **Restore target could become Audapp Input.** `choose_restore_target` returned the
+   current default verbatim when that id was absent from the discovery snapshot, so a
+   restore could set the Windows default back to Audapp Input (silence).
+3. **No honest status** to localize the live render device (`defaultRender*` /
+   `isPhysicalOutputAudapp` did not exist).
+
+Fixes:
+
+- New pure `resolve_physical_output_candidate(devices, saved_selected, previous_restore,
+  current_default)` (`audio_bridge/endpoints.rs`) with priority saved → previous → default
+  → first active non-Audapp, fail-closed otherwise. Audapp exclusion checks **both** the
+  `is_audapp_endpoint` boolean **and** the friendly name (`is_audapp_render_device`).
+- `build_routing_enable_plan` now resolves the physical output first, builds the config
+  against it, then sets default → Audapp General, then starts the bridge. `routing_enable`
+  + `routing_auto_start` thread saved-selected/previous-restore ids; the standalone Bridge
+  Lab start also routes through the resolver.
+- `choose_restore_target` keeps the current default only when confirmed active non-Audapp;
+  otherwise restores to the resolved physical output — **never** an Audapp endpoint.
+- Status honesty: `MultichannelOutputStatus` gains `default_render_id/name` +
+  `is_physical_output_audapp`; the worker reads the live Windows default and raises a
+  `last_error` tripwire if the render output ever resolves to an Audapp endpoint.
+
+**Physical output is now guaranteed non-Audapp by construction** — every selection path
+returns only an active, non-Audapp output or fails closed.
+
+## Bug 2 — msedge Browser → General did not stick
+
+The resolver priority (manual → rule → smart default → fallback) was already correct
+(passing test) and the match round-trips for a normal Win32 process. The gap was the
+missing **optimistic UI update**: the Channel dropdown is derived from persisted
+assignments only, so it appeared to snap back to the Browser smart default during the
+async round-trip.
+
+Fix: extracted the matcher to `src/lib/channel-assignment-match.ts`; `setAssignmentForSession`
+now optimistically upserts the assignment locally (keyed by the same match tuple the
+backend dedupes on), reconciles with the persisted record, and rolls back on error.
+Matching prefers stable identifiers (exe path / process name) so the override survives
+Edge's audio-pid churn across refreshes.
+
+UI honesty: Bridge Lab shows render device vs Windows default (+ amber warning if the
+output is ever Audapp); Apps notes that changing the channel updates the requested grouping
+only and the actual Windows endpoint is moved in Volume Mixer.
+
+## Verification (Pass 2)
+
+- `cargo check` (manifest `src-tauri/Cargo.toml`): exit 0 (pre-existing warnings only).
+- `cargo test --lib`: **91 passed, 0 failed**.
+- `node --test src/lib/*.test.ts`: **42 passed, 0 failed**.
+- `npm run build` (`tsc && vite build`): exit 0, 1923 modules.
+
+New Rust tests: resolver rejects Audapp Input/General/Music/Game/Browser as saved or
+default, rejects Audapp with a stale boolean flag, honors saved→previous→default priority,
+skips inactive saved output, fails closed when only Audapp endpoints exist; restore target
+stays physical when default is Audapp or missing from the snapshot.
+New TS tests: manual msedge→general beats browser, reset returns to browser, persists
+across pid change, matches on process name alone, optimistic upsert by identity.
+
+## Manual smoke status (Pass 2)
+
+**Not run / not confirmed.** The new honest-status fields are intended to make this smoke
+diagnostic — in Bridge Lab, "Render device" must be the physical HD Audio device and the
+amber Audapp-output warning must not appear, even with the Windows default on Audapp
+Input/General.
+
+## Files changed (Pass 2)
+
+Rust: `audio_bridge/endpoints.rs`, `audio_bridge/mod.rs`,
+`audio_bridge/multichannel_manager.rs`, `audio_bridge/multichannel_types.rs`,
+`audio_bridge/multichannel_worker.rs`, `audio_policy/manager.rs`.
+Frontend: `lib/channel-assignment-match.ts` (new), `lib/channel-assignment-match.test.ts`
+(new), `lib/use-channel-assignments.ts`, `lib/use-multichannel-bridge.ts`,
+`types/bridge.ts`, `components/bridge/bridge-lab-view.tsx`, `components/apps/apps-view.tsx`.
+
+## Git status (Pass 2)
+
+On `main`, nothing committed. The files above are modified/untracked; this report updated
+in place.

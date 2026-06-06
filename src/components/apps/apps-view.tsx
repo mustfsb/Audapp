@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus, RefreshCw, RotateCcw, Trash2, Volume2, VolumeX } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,14 +14,19 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
+  groupSessionsIntoApps,
+  type AppSessionGroup,
+} from "@/lib/app-session-group";
+import { statusBadgeVariant } from "@/lib/badge-variant";
+import {
   getChannelRuleMatchLabel,
   getSessionChannelSourceLabel,
   type ResolvedInternalChannel,
 } from "@/lib/channel-workflow";
-import { sessionDisplayLabel, sessionVolumePercent } from "@/lib/discovery-display";
-import { summarizeSessionRoutingHonesty } from "@/lib/session-routing-honesty";
-import { formatRouteApplyStatus } from "@/lib/session-route-status";
-import { isSessionControllable } from "@/lib/session-target";
+import {
+  summarizeRoutingMatch,
+  summarizeSessionRoutingHonesty,
+} from "@/lib/session-routing-honesty";
 import type { AudioChannel } from "@/types/audio";
 import type { AudioDiscoveryDevice, AudioDiscoverySession } from "@/types/discovery";
 import type {
@@ -56,24 +62,23 @@ interface AppsViewProps {
 
 const LIVE_VOLUME_THROTTLE_MS = 100;
 
-function SessionVolumeControl({
-  session,
+function VolumeControl({
+  value,
   disabled,
   isPending,
-  onVolumeCommit,
+  onCommit,
 }: {
-  session: AudioSessionView;
+  value: number;
   disabled: boolean;
   isPending: boolean;
-  onVolumeCommit: (session: AudioSessionView, volumePercent: number) => void;
+  onCommit: (volumePercent: number) => void;
 }) {
-  const discoveredVolume = sessionVolumePercent(session) ?? 0;
-  const [draftVolume, setDraftVolume] = useState(discoveredVolume);
+  const [draftVolume, setDraftVolume] = useState(value);
   const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setDraftVolume(discoveredVolume);
-  }, [discoveredVolume, session.id]);
+    setDraftVolume(value);
+  }, [value]);
 
   useEffect(() => {
     return () => {
@@ -84,24 +89,24 @@ function SessionVolumeControl({
   }, []);
 
   function handleValueChange(values: number[]) {
-    const value = values[0] ?? draftVolume;
-    setDraftVolume(value);
+    const next = values[0] ?? draftVolume;
+    setDraftVolume(next);
     if (liveTimerRef.current !== null) {
       clearTimeout(liveTimerRef.current);
     }
     liveTimerRef.current = setTimeout(() => {
       liveTimerRef.current = null;
-      onVolumeCommit(session, value);
+      onCommit(next);
     }, LIVE_VOLUME_THROTTLE_MS);
   }
 
   function handleValueCommit(values: number[]) {
-    const value = values[0] ?? draftVolume;
+    const next = values[0] ?? draftVolume;
     if (liveTimerRef.current !== null) {
       clearTimeout(liveTimerRef.current);
       liveTimerRef.current = null;
     }
-    onVolumeCommit(session, value);
+    onCommit(next);
   }
 
   return (
@@ -117,26 +122,10 @@ function SessionVolumeControl({
         className="flex-1"
       />
       <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
-        {draftVolume}%{isPending ? "..." : ""}
+        {draftVolume}%{isPending ? "…" : ""}
       </span>
     </div>
   );
-}
-
-function describeResolvedChannel(resolvedChannel: ResolvedInternalChannel): string {
-  if (resolvedChannel.source === "rule" && resolvedChannel.rule) {
-    return `Matched rule: ${getChannelRuleMatchLabel(resolvedChannel.rule.matchType)} "${resolvedChannel.rule.pattern}".`;
-  }
-
-  if (resolvedChannel.source === "manual") {
-    return "Manual assignment overrides rules and smart defaults.";
-  }
-
-  if (resolvedChannel.source === "smart_default") {
-    return "Auto-assigned by Audapp smart defaults.";
-  }
-
-  return "Using the Audapp General fallback because no manual assignment or rule matched.";
 }
 
 export function AppsView({
@@ -162,20 +151,23 @@ export function AppsView({
   onMuteToggle,
   onRefresh,
 }: AppsViewProps) {
+  const appGroups = groupSessionsIntoApps(sessions);
+
+  function controllableSessions(group: AppSessionGroup<AudioSessionView>) {
+    return group.underlyingSessions.filter(
+      (session) => session.state !== "expired" && Boolean(session.deviceId),
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Apps</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Requested Audapp channels are separate from the Windows endpoint each app
-            is actually using.
+            Group each app into an Audapp channel. The actual Windows output can differ
+            until you change it in Volume Mixer.
           </p>
-          {!routeCapability.perAppSwitchingSupported && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {routeCapability.statusReason} Manual fallback: {routeCapability.manualFallback}
-            </p>
-          )}
         </div>
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={isLoading}>
           <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
@@ -187,165 +179,179 @@ export function AppsView({
         <p className="text-sm text-amber-600 dark:text-amber-400">{assignmentsError}</p>
       )}
 
-      {sessions.length === 0 ? (
-        <div className="rounded-xl bg-card px-4 py-8 text-center">
-          <p className="text-sm font-medium text-muted-foreground">No active sessions</p>
+      {appGroups.length === 0 ? (
+        <div className="rounded-2xl bg-card px-4 py-10 text-center">
+          <p className="text-sm font-medium text-muted-foreground">No active apps</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Start audio playback in an application, then refresh.
           </p>
         </div>
       ) : (
-        <div className="grid gap-2 xl:grid-cols-2">
-          {sessions.map((session) => {
-            const resolvedChannel = resolveChannelForSession(session);
+        <div className="grid gap-3 xl:grid-cols-2">
+          {appGroups.map((group) => {
+            const representative = group.representative;
+            const resolvedChannel = resolveChannelForSession(representative);
             const routingHonesty = summarizeSessionRoutingHonesty(
-              session,
+              representative,
               resolvedChannel,
               outputDevices,
             );
-            const controllable = isSessionControllable(session);
-            const pending = isSessionPending(session);
-            const inlineError = sessionError(session);
-            const disabled = !controllable || pending || isAssignmentsLoading;
+            const match = summarizeRoutingMatch(resolvedChannel.channel.id, routingHonesty);
+            const pending = group.underlyingSessions.some((session) =>
+              isSessionPending(session),
+            );
+            const inlineError =
+              group.underlyingSessions.map((session) => sessionError(session)).find(Boolean) ??
+              null;
+            const controllable = group.anyControllable;
+            const channelDisabled = isAssignmentsLoading || pending;
+
+            const applyMute = (muted: boolean) => {
+              for (const session of controllableSessions(group)) {
+                onMuteToggle(session, muted);
+              }
+            };
+            const applyVolume = (volumePercent: number) => {
+              for (const session of controllableSessions(group)) {
+                onVolumeCommit(session, volumePercent);
+              }
+            };
+            const applyRouteIntent = (intent: SessionRouteIntent) => {
+              for (const session of group.underlyingSessions) {
+                if (session.routeIntentKey) {
+                  onRouteIntentChange(session, intent);
+                }
+              }
+            };
 
             return (
-              <div key={session.id} className="space-y-3 rounded-xl bg-card px-4 py-3.5">
+              <div key={group.key} className="space-y-3 rounded-2xl bg-card px-4 py-3.5">
+                {/* Identity + mute */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium leading-tight">
-                      {sessionDisplayLabel(session)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {session.processName ?? "Unknown process"}
-                      {session.processId ? ` | PID ${session.processId}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {session.muted && (
-                      <span className="text-xs text-muted-foreground">Muted</span>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground"
-                      disabled={disabled}
-                      onClick={() => onMuteToggle(session, !session.muted)}
-                      title={session.muted ? "Unmute" : "Mute"}
-                    >
-                      {session.muted ? (
-                        <VolumeX className="size-3.5" />
-                      ) : (
-                        <Volume2 className="size-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <SessionVolumeControl
-                  session={session}
-                  disabled={!controllable}
-                  isPending={pending}
-                  onVolumeCommit={onVolumeCommit}
-                />
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      Route intent
-                    </span>
-                    <Select
-                      value={session.routeIntent}
-                      disabled={!session.routeIntentKey || disabled}
-                      onValueChange={(value) =>
-                        onRouteIntentChange(session, value as SessionRouteIntent)
-                      }
-                    >
-                      <SelectTrigger className="h-7 flex-1 text-xs">
-                        <SelectValue placeholder="System" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {routeIntentOptions.map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            className="text-xs"
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Route intent is stored separately from Audapp internal channel grouping.
-                  </p>
-                  <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Requested Audapp channel: {routingHonesty.requestedChannelLabel}
-                    </p>
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
-                    </p>
-                  </div>
-                  {session.routeStatus && (
-                    <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2">
-                      <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        Apply status: {formatRouteApplyStatus(session.routeStatus.applyStatus)}
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium leading-tight">
+                        {group.displayName}
                       </p>
-                      {session.routeStatus.note && (
-                        <p className="text-[11px] leading-relaxed text-muted-foreground">
-                          {session.routeStatus.note}
-                        </p>
-                      )}
-                      {session.routeStatus.lastError && (
-                        <p className="text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
-                          {session.routeStatus.lastError}
-                        </p>
+                      {group.sessionCount > 1 && (
+                        <Badge variant="secondary">{group.sessionCount} sessions</Badge>
                       )}
                     </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {group.processName ?? "Unknown process"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground"
+                    disabled={!controllable || pending}
+                    onClick={() => applyMute(!group.muted)}
+                    title={group.muted ? "Unmute" : "Mute"}
+                  >
+                    {group.muted ? (
+                      <VolumeX className="size-3.5" />
+                    ) : (
+                      <Volume2 className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
+
+                <VolumeControl
+                  value={group.volume ?? 0}
+                  disabled={!controllable}
+                  isPending={pending}
+                  onCommit={applyVolume}
+                />
+
+                {/* Channel assignment */}
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs text-muted-foreground">Channel</span>
+                  <Select
+                    value={resolvedChannel.channelId}
+                    disabled={channelDisabled}
+                    onValueChange={(value) => onChannelChange(representative, value)}
+                  >
+                    <SelectTrigger size="sm" className="flex-1 text-xs">
+                      <SelectValue placeholder="Assign" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channels.map((channel) => (
+                        <SelectItem key={channel.id} value={channel.id} className="text-xs">
+                          {channel.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {resolvedChannel.assignment && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={channelDisabled}
+                      onClick={() => onResetManualAssignment(representative)}
+                      title="Reset to smart default"
+                    >
+                      <RotateCcw className="size-3" />
+                      Reset
+                    </Button>
                   )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-xs text-muted-foreground">Channel</span>
-                    <Select
-                      value={resolvedChannel.channelId}
-                      disabled={isAssignmentsLoading || pending}
-                      onValueChange={(value) => onChannelChange(session, value)}
-                    >
-                      <SelectTrigger className="h-7 flex-1 text-xs">
-                        <SelectValue placeholder="Assign" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {channels.map((channel) => (
-                          <SelectItem key={channel.id} value={channel.id} className="text-xs">
-                            {channel.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {resolvedChannel.assignment && (
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        disabled={isAssignmentsLoading || pending}
-                        onClick={() => onResetManualAssignment(session)}
-                      >
-                        <RotateCcw className="size-3" />
-                        Reset manual
-                      </Button>
-                    )}
+                {/* Requested vs actual endpoint */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 text-[11px] leading-relaxed text-muted-foreground">
+                    <p className="truncate">
+                      Requested:{" "}
+                      <span className="font-medium text-foreground">
+                        {routingHonesty.requestedChannelLabel}
+                      </span>{" "}
+                      <span className="text-muted-foreground/70">
+                        ({getSessionChannelSourceLabel(resolvedChannel.source)})
+                      </span>
+                    </p>
+                    <p className="truncate">
+                      Actual:{" "}
+                      <span className="font-medium text-foreground">
+                        {routingHonesty.actualEndpointLabel}
+                      </span>
+                    </p>
                   </div>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    {getSessionChannelSourceLabel(resolvedChannel.source)} |{" "}
-                    {describeResolvedChannel(resolvedChannel)}
+                  <Badge variant={statusBadgeVariant(match.status)} className="shrink-0">
+                    {match.statusLabel}
+                  </Badge>
+                </div>
+                {match.helperText && (
+                  <p className="text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
+                    {match.helperText}
                   </p>
+                )}
+
+                {/* Route intent — secondary control */}
+                <div className="flex items-center gap-2 border-t border-border/40 pt-2">
+                  <span className="shrink-0 text-[11px] text-muted-foreground">Route intent</span>
+                  <Select
+                    value={representative.routeIntent}
+                    disabled={!representative.routeIntentKey || !controllable || pending}
+                    onValueChange={(value) =>
+                      applyRouteIntent(value as SessionRouteIntent)
+                    }
+                  >
+                    <SelectTrigger size="sm" className="h-7 flex-1 text-[11px]">
+                      <SelectValue placeholder="System" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {routeIntentOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value} className="text-xs">
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {!controllable && (
                   <p className="text-xs text-muted-foreground">
-                    Controls unavailable for this session.
+                    Controls unavailable for this app.
                   </p>
                 )}
                 {inlineError && (
@@ -357,13 +363,19 @@ export function AppsView({
         </div>
       )}
 
-      <details className="group rounded-xl border border-border/70 bg-card/60">
+      {!routeCapability.perAppSwitchingSupported && (
+        <p className="text-xs text-muted-foreground">
+          Audapp groups apps into channels but does not move Windows endpoints automatically.
+          Use the Windows Volume Mixer to send an app to a specific Audapp channel.
+        </p>
+      )}
+
+      <details className="group rounded-2xl border border-border/60 bg-card/60">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-4 py-3">
           <div>
             <p className="text-sm font-medium">Advanced channel rules</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Rules auto-assign new sessions to Audapp internal channels. Manual
-              session assignment always wins.
+              Rules auto-assign new apps to channels. Manual assignment always wins.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
@@ -372,10 +384,10 @@ export function AppsView({
           </div>
         </summary>
 
-        <div className="border-t border-border/60 px-4 py-4">
+        <div className="border-t border-border/50 px-4 py-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              Keep this list empty if smart defaults are enough for now.
+              Keep this empty if smart defaults are enough for now.
             </p>
             <Button variant="outline" size="xs" onClick={onAddChannelRule}>
               <Plus className="size-3" />
@@ -385,11 +397,11 @@ export function AppsView({
 
           <div className="mt-4 space-y-3">
             {channelRules.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/70 px-4 py-5">
+              <div className="rounded-xl border border-dashed border-border/60 px-4 py-5">
                 <p className="text-sm font-medium">No channel rules yet.</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Manual assignments and smart defaults still work. Add a rule when
-                  you want new sessions to auto-assign to a channel.
+                  Manual assignments and smart defaults still work. Add a rule when you
+                  want new apps to auto-assign to a channel.
                 </p>
               </div>
             ) : (
@@ -399,7 +411,7 @@ export function AppsView({
                 .map((rule) => (
                   <div
                     key={rule.id}
-                    className="rounded-xl border border-border/70 bg-background/60 px-3 py-3"
+                    className="rounded-xl border border-border/60 bg-background/60 px-3 py-3"
                   >
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="text-muted-foreground">When</span>
@@ -411,7 +423,7 @@ export function AppsView({
                           })
                         }
                       >
-                        <SelectTrigger className="h-7 w-[10.5rem] text-xs">
+                        <SelectTrigger size="sm" className="w-[10.5rem] text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -432,16 +444,16 @@ export function AppsView({
                           onUpdateChannelRule(rule.id, { pattern: event.target.value })
                         }
                         placeholder="spotify"
-                        className="h-7 min-w-40 flex-1 text-xs"
+                        className="h-8 min-w-40 flex-1 text-xs"
                       />
-                      <span className="text-muted-foreground">-&gt;</span>
+                      <span className="text-muted-foreground">→</span>
                       <Select
                         value={rule.channelId}
                         onValueChange={(value) =>
                           onUpdateChannelRule(rule.id, { channelId: value })
                         }
                       >
-                        <SelectTrigger className="h-7 w-[10.5rem] text-xs">
+                        <SelectTrigger size="sm" className="w-[10.5rem] text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -478,7 +490,7 @@ export function AppsView({
                                 priority: Number(event.target.value || 0),
                               })
                             }
-                            className="h-7 w-20 text-xs"
+                            className="h-8 w-20 text-xs"
                           />
                         </label>
                       </div>
@@ -492,6 +504,9 @@ export function AppsView({
                         Delete
                       </Button>
                     </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {getChannelRuleMatchLabel(rule.matchType)} “{rule.pattern || "…"}”
+                    </p>
                   </div>
                 ))
             )}

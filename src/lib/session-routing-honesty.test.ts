@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import type { ResolvedInternalChannel } from "./channel-workflow.ts";
 import type { AudioDiscoveryDevice } from "../types/discovery.ts";
 import type { AudioSessionView } from "../types/session-view.ts";
-import { summarizeSessionRoutingHonesty } from "./session-routing-honesty.ts";
+import {
+  summarizeRoutingMatch,
+  summarizeSessionRoutingHonesty,
+} from "./session-routing-honesty.ts";
 
 function resolvedChannel(
   channelId: "general" | "music" | "game" | "browser",
@@ -103,4 +106,46 @@ test("marks the actual endpoint as unknown when Windows does not report one", ()
 
   assert.equal(summary.actualEndpointLabel, "Unknown Windows endpoint");
   assert.equal(summary.actualEndpointKnown, false);
+});
+
+test("routing match: requested channel equals the actual endpoint", () => {
+  const match = summarizeRoutingMatch("browser", {
+    requestedChannelLabel: "Audapp Browser",
+    actualEndpointLabel: "Hoparlor (Audapp Browser)",
+    actualEndpointKnown: true,
+  });
+  assert.equal(match.matches, true);
+  assert.equal(match.status, "ok");
+  assert.equal(match.helperText, null);
+});
+
+test("routing match: a different Audapp endpoint needs a manual Volume Mixer move", () => {
+  const match = summarizeRoutingMatch("general", {
+    requestedChannelLabel: "Audapp General",
+    actualEndpointLabel: "Hoparlor (Audapp Browser)",
+    actualEndpointKnown: true,
+  });
+  assert.equal(match.matches, false);
+  assert.equal(match.status, "warning");
+  assert.match(match.helperText ?? "", /Volume Mixer/);
+});
+
+test("routing match: a non-Audapp output is reported as informational", () => {
+  const match = summarizeRoutingMatch("music", {
+    requestedChannelLabel: "Audapp Music",
+    actualEndpointLabel: "Speakers (Realtek Audio)",
+    actualEndpointKnown: true,
+  });
+  assert.equal(match.matches, false);
+  assert.equal(match.status, "info");
+});
+
+test("routing match: an unknown output is neutral with no guidance", () => {
+  const match = summarizeRoutingMatch("general", {
+    requestedChannelLabel: "Audapp General",
+    actualEndpointLabel: "Unknown Windows endpoint",
+    actualEndpointKnown: false,
+  });
+  assert.equal(match.status, "neutral");
+  assert.equal(match.helperText, null);
 });

@@ -2,9 +2,10 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::audio::{capture_discovery_snapshot, AudioDiscoveryDevice};
 use crate::audio_bridge::{
-    multichannel_bridge_is_running, multichannel_bridge_shutdown, multichannel_bridge_start,
-    multichannel_bridge_status, multichannel_bridge_stop, resolve_multichannel_start_from_devices,
-    BridgeState, ResolvedMultichannelStart,
+    is_active_physical_output, multichannel_bridge_is_running, multichannel_bridge_shutdown,
+    multichannel_bridge_start, multichannel_bridge_status, multichannel_bridge_stop,
+    resolve_multichannel_start_from_devices, resolve_physical_output_candidate, BridgeState,
+    RenderEndpointInfo, ResolvedMultichannelStart,
 };
 use crate::audio_policy::default_endpoint::set_default_render_endpoint;
 use crate::audio_policy::types::RoutingStatus;
@@ -106,6 +107,11 @@ pub fn routing_enable(output_endpoint_id: String) -> Result<RoutingStatus, Strin
         ));
     }
 
+    let previous_restore_target_id = {
+        let state = global().lock().unwrap_or_else(|p| p.into_inner());
+        state.previous_default_id.clone()
+    };
+
     let snapshot = capture_discovery_snapshot();
     let (current_default_id, current_default_name) = with_com(get_default_render_endpoint_info_com)
         .map_err(record_failure)?;
@@ -115,6 +121,7 @@ pub fn routing_enable(output_endpoint_id: String) -> Result<RoutingStatus, Strin
         current_default_id.as_deref(),
         current_default_name.as_deref(),
         Some(output_endpoint_id.as_str()),
+        previous_restore_target_id.as_deref(),
         false,
     )
     .map_err(record_failure)?;
@@ -170,9 +177,12 @@ pub fn routing_auto_start() {
         return;
     }
 
-    let preferred_output_id = {
+    let (preferred_output_id, previous_restore_target_id) = {
         let state = global().lock().unwrap_or_else(|p| p.into_inner());
-        state.selected_output_id.clone()
+        (
+            state.selected_output_id.clone(),
+            state.previous_default_id.clone(),
+        )
     };
 
     let snapshot = capture_discovery_snapshot();
@@ -190,6 +200,7 @@ pub fn routing_auto_start() {
         current_default_id.as_deref(),
         current_default_name.as_deref(),
         preferred_output_id.as_deref(),
+        previous_restore_target_id.as_deref(),
         true,
     ) {
         Ok(plan) => plan,
@@ -313,17 +324,27 @@ fn build_routing_enable_plan(
     devices: &[AudioDiscoveryDevice],
     current_default_id: Option<&str>,
     current_default_name: Option<&str>,
-    preferred_output_id: Option<&str>,
+    saved_selected_output_id: Option<&str>,
+    previous_restore_target_id: Option<&str>,
     auto_started: bool,
 ) -> Result<RoutingEnablePlan, String> {
-    let start =
-        resolve_multichannel_start_from_devices(devices, preferred_output_id, auto_started)?;
-    let (previous_default_id, previous_default_name) = choose_restore_target(
+    // 1. Resolve the physical (non-Audapp) render output FIRST. This is guaranteed
+    //    to never be an Audapp endpoint, even when the current Windows default is
+    //    Audapp Input / Audapp General / etc.
+    let physical_output = resolve_physical_output_candidate(
         devices,
+        saved_selected_output_id,
+        previous_restore_target_id,
         current_default_id,
-        current_default_name,
-        &start.config.output_endpoint_id,
-    );
+    )?;
+
+    // 2. Build the multi-channel start config against that physical output.
+    let start =
+        resolve_multichannel_start_from_devices(devices, Some(&physical_output.id), auto_started)?;
+
+    // 3. Choose a restore target that is ALWAYS a physical, non-Audapp endpoint.
+    let (previous_default_id, previous_default_name) =
+        choose_restore_target(devices, current_default_id, &physical_output);
 
     Ok(RoutingEnablePlan {
         start,
@@ -332,30 +353,29 @@ fn build_routing_enable_plan(
     })
 }
 
+/// Decide which endpoint to restore the Windows default to on disable/shutdown.
+///
+/// The restore target must never be an Audapp endpoint — restoring the default to
+/// Audapp Input/General/etc. would leave the system silent. We therefore only keep
+/// the current Windows default when it can be confirmed to be an active, non-Audapp
+/// physical endpoint; otherwise we restore to the resolved physical output.
 fn choose_restore_target(
     devices: &[AudioDiscoveryDevice],
     current_default_id: Option<&str>,
-    current_default_name: Option<&str>,
-    selected_output_id: &str,
+    physical_output: &RenderEndpointInfo,
 ) -> (Option<String>, Option<String>) {
     if let Some(default_id) = current_default_id {
         if let Some(device) = find_device_by_id(devices, default_id) {
-            if !device.is_audapp_endpoint {
+            if is_active_physical_output(device) {
                 return (Some(device.id.clone()), Some(device.name.clone()));
             }
-        } else {
-            return (
-                Some(default_id.to_string()),
-                current_default_name.map(str::to_string),
-            );
         }
     }
 
-    if let Some(device) = find_device_by_id(devices, selected_output_id) {
-        return (Some(device.id.clone()), Some(device.name.clone()));
-    }
-
-    (None, None)
+    (
+        Some(physical_output.id.clone()),
+        Some(physical_output.name.clone()),
+    )
 }
 
 fn find_device_by_id<'a>(
@@ -567,6 +587,7 @@ mod tests {
             Some("speaker-id"),
             Some("Speakers (USB Audio Device)"),
             Some("speaker-id"),
+            None,
             false,
         )
         .expect("plan");
@@ -583,14 +604,37 @@ mod tests {
             Some("browser-id"),
             Some("Hoparlor (Audapp Browser)"),
             Some("speaker-id"),
+            None,
             true,
         )
         .expect("plan");
 
+        // Physical render output is the speaker, never the Audapp Browser default.
+        assert_eq!(plan.start.config.output_endpoint_id, "speaker-id");
+        // Restore target must be the physical speaker, never Audapp Browser.
         assert_eq!(plan.previous_default_id.as_deref(), Some("speaker-id"));
         assert_eq!(
             plan.previous_default_name.as_deref(),
             Some("Speakers (USB Audio Device)")
         );
+    }
+
+    #[test]
+    fn routing_enable_never_restores_to_audapp_when_default_missing_from_snapshot() {
+        // Regression: previously, if the current default id was not present in the
+        // discovery snapshot, it was stored verbatim as the restore target — which
+        // could be Audapp Input. The restore target must always be physical.
+        let plan = build_routing_enable_plan(
+            &baseline_devices(),
+            Some("audapp-input-id-not-in-snapshot"),
+            Some("Hoparlor (Audapp Input)"),
+            None,
+            None,
+            true,
+        )
+        .expect("plan");
+
+        assert_eq!(plan.previous_default_id.as_deref(), Some("speaker-id"));
+        assert_eq!(plan.start.config.output_endpoint_id, "speaker-id");
     }
 }

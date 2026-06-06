@@ -1,20 +1,17 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { AudappChannelsStatus } from "@/components/audapp/audapp-channels-status";
 import type { AudappChannelEndpoint } from "@/lib/audapp-endpoints";
+import { groupSessionsIntoApps } from "@/lib/app-session-group";
+import { statusBadgeVariant } from "@/lib/badge-variant";
 import {
   getChannelRuleMatchLabel,
   getSessionChannelSourceLabel,
   type ResolvedInternalChannel,
 } from "@/lib/channel-workflow";
-import { summarizeSessionRoutingHonesty } from "@/lib/session-routing-honesty";
-import { formatRouteApplyStatus } from "@/lib/session-route-status";
-import { sessionDisplayLabel } from "@/lib/discovery-display";
+import {
+  summarizeRoutingMatch,
+  summarizeSessionRoutingHonesty,
+} from "@/lib/session-routing-honesty";
 import { useAudioDsp } from "@/lib/use-audio-dsp";
 import type { AudioChannel } from "@/types/audio";
 import type { AudioDiscoveryDevice, AudioDiscoverySession } from "@/types/discovery";
@@ -152,123 +149,83 @@ export function MixerView(props: MixerViewProps) {
         </p>
       </div>
 
-      {/* Session cards per channel */}
+      {/* App cards per channel */}
       <div className="grid gap-3 lg:grid-cols-2">
         {props.channels.map((channel) => {
           const channelSessions = props.sessions.filter(
             (session) => props.resolveChannelForSession(session).channelId === channel.id,
           );
+          const appGroups = groupSessionsIntoApps(channelSessions);
 
           return (
-            <div key={`${channel.id}-sessions`} className="rounded-xl bg-card px-4 py-3">
+            <div key={`${channel.id}-sessions`} className="rounded-2xl bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium">{channel.name}</p>
                   {props.soloedChannelIds.has(channel.id) && (
-                    <span className="rounded px-1 py-0.5 text-[9px] font-semibold uppercase bg-blue-500/20 text-blue-600 dark:text-blue-400">
-                      Solo
-                    </span>
+                    <Badge variant={statusBadgeVariant("info")}>Solo</Badge>
                   )}
                   {props.mutedBySoloIds.has(channel.id) && (
-                    <span className="rounded px-1 py-0.5 text-[9px] font-semibold uppercase bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                      Muted by solo
-                    </span>
+                    <Badge variant={statusBadgeVariant("warning")}>Muted by solo</Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {channelSessions.length === 0
-                    ? "No assigned sessions"
-                    : `${channelSessions.length} session(s)`}
+                  {appGroups.length === 0
+                    ? "No apps"
+                    : `${appGroups.length} app${appGroups.length !== 1 ? "s" : ""}`}
                 </p>
               </div>
 
               <div className="mt-3 space-y-2">
-                {channelSessions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No sessions are grouped here yet.
-                  </p>
+                {appGroups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No apps grouped here yet.</p>
                 ) : (
-                  channelSessions.map((session) => {
-                    const resolvedChannel = props.resolveChannelForSession(session);
+                  appGroups.map((group) => {
+                    const representative = group.representative;
+                    const resolvedChannel = props.resolveChannelForSession(representative);
                     const routingHonesty = summarizeSessionRoutingHonesty(
-                      session,
+                      representative,
                       resolvedChannel,
                       props.outputDevices,
+                    );
+                    const match = summarizeRoutingMatch(
+                      resolvedChannel.channel.id,
+                      routingHonesty,
                     );
 
                     return (
                       <div
-                        key={`${channel.id}-${session.id}`}
-                        className="rounded-lg border border-border/60 px-3 py-2"
+                        key={`${channel.id}-${group.key}`}
+                        className="rounded-xl border border-border/50 px-3 py-2"
                       >
                         <div className="flex items-start gap-3">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs font-medium">
-                              {sessionDisplayLabel(session)}
-                            </p>
-                            <p className="truncate text-[11px] text-muted-foreground">
-                              {session.processName ?? "Unknown process"}
-                              {session.processId ? ` | PID ${session.processId}` : ""}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-xs font-medium">{group.displayName}</p>
+                              {group.sessionCount > 1 && (
+                                <Badge variant="secondary">{group.sessionCount}</Badge>
+                              )}
+                            </div>
                             <p className="truncate text-[11px] text-muted-foreground">
                               {getSessionChannelSourceLabel(resolvedChannel.source)}
                               {resolvedChannel.rule
-                                ? ` | ${getChannelRuleMatchLabel(
+                                ? ` · ${getChannelRuleMatchLabel(
                                     resolvedChannel.rule.matchType,
                                   )} "${resolvedChannel.rule.pattern}"`
                                 : ""}
                             </p>
                           </div>
-                          <Select
-                            value={session.routeIntent}
-                            disabled={!session.routeIntentKey}
-                            onValueChange={(value) =>
-                              props.onRouteIntentChange(session, value as SessionRouteIntent)
-                            }
-                          >
-                            <SelectTrigger className="h-8 w-36 text-xs">
-                              <SelectValue placeholder="System" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {props.routeIntentOptions.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  className="text-xs"
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Badge variant={statusBadgeVariant(match.status)} className="shrink-0">
+                            {match.statusLabel}
+                          </Badge>
                         </div>
-                        {session.routeStatus && (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-[11px] text-muted-foreground">
-                              Requested Audapp channel: {routingHonesty.requestedChannelLabel}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              Apply status: {formatRouteApplyStatus(session.routeStatus.applyStatus)}
-                            </p>
-                            {session.routeStatus.lastError && (
-                              <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                                {session.routeStatus.lastError}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {!session.routeStatus && (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-[11px] text-muted-foreground">
-                              Requested Audapp channel: {routingHonesty.requestedChannelLabel}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                              Actual Windows endpoint: {routingHonesty.actualEndpointLabel}
-                            </p>
-                          </div>
+                        <p className="mt-1.5 truncate text-[11px] text-muted-foreground">
+                          Actual: {routingHonesty.actualEndpointLabel}
+                        </p>
+                        {match.helperText && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                            {match.helperText}
+                          </p>
                         )}
                       </div>
                     );

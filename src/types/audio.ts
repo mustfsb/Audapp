@@ -3,10 +3,12 @@ export type SectionId =
   | "mixer"
   | "apps"
   | "devices"
+  | "audioRouting"
   | "equalizer"
   | "noise"
   | "profiles"
   | "settings"
+  // Developer-only diagnostics (hidden unless Developer mode is enabled).
   | "engine"
   | "routing"
   | "bridge";

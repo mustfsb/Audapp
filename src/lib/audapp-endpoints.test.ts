@@ -8,7 +8,7 @@ import {
   getAudappEndpointClass,
   summarizeAudappChannelEndpoints,
 } from "./audapp-endpoints.ts";
-import { INTERNAL_CHANNELS } from "./internal-channels.ts";
+import { DEFAULT_INTERNAL_CHANNEL_ID, INTERNAL_CHANNELS } from "./internal-channels.ts";
 
 function outputDevice(
   name: string,
@@ -110,4 +110,23 @@ test("internal output channels are general/music/game/browser with no voice", ()
   assert.deepEqual(ids, ["general", "music", "game", "browser"]);
   assert.deepEqual([...AUDAPP_OUTPUT_CHANNEL_IDS], ["general", "music", "game", "browser"]);
   assert.equal(ids.includes("voice" as never), false);
+});
+
+test("Audapp General is the default / fallback routing channel", () => {
+  assert.equal(DEFAULT_INTERNAL_CHANNEL_ID, "general");
+});
+
+test("Audapp Input is never mapped as a primary routing endpoint", () => {
+  const devices: AudioDiscoveryDevice[] = [
+    outputDevice("Mikrofon (Audapp Input)", { id: "audapp-input" }),
+    outputDevice("Hoparlör (Audapp General)", { id: "audapp-general", isDefault: true }),
+  ];
+
+  const summary = summarizeAudappChannelEndpoints(devices);
+  assert.equal(summary.find((entry) => entry.channelId === "general")?.available, true);
+
+  // The Input endpoint must not back any of the four routing channels.
+  for (const entry of summary) {
+    assert.notEqual(entry.deviceId, "audapp-input");
+  }
 });

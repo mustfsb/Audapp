@@ -71,6 +71,9 @@ export interface MultichannelOutputStatus {
   outputId: string | null;
   outputName: string | null;
   outputFormat: string | null;
+  defaultRenderId: string | null;
+  defaultRenderName: string | null;
+  isPhysicalOutputAudapp: boolean;
   renderBufferFrames: number;
   renderPaddingFrames: number;
   bufferFillMs: number;

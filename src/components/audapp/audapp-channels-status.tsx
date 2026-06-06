@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { statusBadgeVariant } from "@/lib/badge-variant";
 import { cn } from "@/lib/utils";
 import type { AudappChannelEndpoint } from "@/lib/audapp-endpoints";
 
@@ -16,7 +17,7 @@ interface AudappChannelsStatusProps {
  */
 export function AudappChannelsStatus({
   endpoints,
-  title = "AudappChannels",
+  title = "Channels",
   description,
   className,
 }: AudappChannelsStatusProps) {
@@ -25,21 +26,19 @@ export function AudappChannelsStatus({
 
   return (
     <section className={cn("space-y-2", className)}>
-      <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <Badge
-          variant="outline"
-          className={cn(
-            "text-xs",
-            allAvailable
-              ? "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30"
-              : "bg-muted text-muted-foreground border-border",
+      {(title || description) && (
+        <div className="space-y-1">
+          {title && (
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">{title}</p>
+              <Badge variant={statusBadgeVariant(allAvailable ? "ok" : "warning")}>
+                {availableCount}/{endpoints.length} available
+              </Badge>
+            </div>
           )}
-        >
-          {availableCount}/{endpoints.length} available
-        </Badge>
-      </div>
-      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2">
         {endpoints.map((endpoint) => (
           <div
@@ -52,22 +51,9 @@ export function AudappChannelsStatus({
                 {endpoint.deviceName ?? "No endpoint detected"}
               </p>
             </div>
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                endpoint.available
-                  ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block size-1.5 rounded-full",
-                  endpoint.available ? "bg-green-500" : "bg-muted-foreground/50",
-                )}
-              />
+            <Badge variant={statusBadgeVariant(endpoint.available ? "ok" : "error")}>
               {endpoint.available ? "Available" : "Missing"}
-            </span>
+            </Badge>
           </div>
         ))}
       </div>

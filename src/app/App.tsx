@@ -35,6 +35,7 @@ import { AppsView } from "@/components/apps/apps-view";
 import { BridgeLabView } from "@/components/bridge/bridge-lab-view";
 import { EngineLabView } from "@/components/engine/engine-lab-view";
 import { RoutingLabView } from "@/components/routing/routing-lab-view";
+import { AudioRoutingView } from "@/components/routing/audio-routing-view";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { DevicesView } from "@/components/devices/devices-view";
 import { EqualizerView } from "@/components/eq/equalizer-view";
@@ -44,23 +45,31 @@ import { NoiseView } from "@/components/noise/noise-view";
 import { ProfilesView } from "@/components/profiles/profiles-view";
 import { SettingsView } from "@/components/settings/settings-view";
 
-const navigation = [
-  { id: "dashboard", label: "Dashboard", description: "" },
-  { id: "mixer", label: "Mixer", description: "" },
-  { id: "apps", label: "Apps", description: "" },
-  { id: "devices", label: "Devices", description: "" },
-  { id: "equalizer", label: "Equalizer", description: "" },
-  { id: "noise", label: "Noise", description: "" },
-  { id: "profiles", label: "Profiles", description: "" },
-  { id: "settings", label: "Settings", description: "" },
-  { id: "engine", label: "Engine Lab", description: "" },
-  { id: "routing", label: "Routing Lab", description: "" },
-  { id: "bridge", label: "Bridge Lab", description: "" },
-] as const satisfies ReadonlyArray<{
+type NavItem = {
   id: SectionId;
   label: string;
   description: string;
-}>;
+  group: "product" | "developer";
+};
+
+const productNavigation: ReadonlyArray<NavItem> = [
+  { id: "dashboard", label: "Dashboard", description: "", group: "product" },
+  { id: "mixer", label: "Mixer", description: "", group: "product" },
+  { id: "apps", label: "Apps", description: "", group: "product" },
+  { id: "devices", label: "Devices", description: "", group: "product" },
+  { id: "audioRouting", label: "Audio Routing", description: "", group: "product" },
+  { id: "equalizer", label: "Equalizer", description: "", group: "product" },
+  { id: "noise", label: "Noise", description: "", group: "product" },
+  { id: "profiles", label: "Profiles", description: "", group: "product" },
+  { id: "settings", label: "Settings", description: "", group: "product" },
+];
+
+// Developer diagnostics — only shown in the sidebar when Developer mode is on.
+const developerNavigation: ReadonlyArray<NavItem> = [
+  { id: "engine", label: "Engine Lab", description: "", group: "developer" },
+  { id: "routing", label: "Routing Lab", description: "", group: "developer" },
+  { id: "bridge", label: "Bridge Lab", description: "", group: "developer" },
+];
 
 const routeIntentOptions: Array<{ value: SessionRouteIntent; label: string }> = [
   { value: "system", label: "System" },
@@ -69,9 +78,20 @@ const routeIntentOptions: Array<{ value: SessionRouteIntent; label: string }> = 
   { value: "monitor_only", label: "Monitor only" },
 ];
 
+const DEVELOPER_MODE_STORAGE_KEY = "audapp-developer-mode";
+
+function getInitialDeveloperMode(): boolean {
+  try {
+    return localStorage.getItem(DEVELOPER_MODE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const [activeSection, setActiveSection] = useState<SectionId>("dashboard");
   const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
+  const [developerMode, setDeveloperMode] = useState<boolean>(() => getInitialDeveloperMode());
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [channelErrors, setChannelErrors] = useState<Record<string, string>>({});
   const channelPendingRef = useRef<Set<string>>(new Set());
@@ -116,6 +136,26 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  const navigation = useMemo(
+    () => (developerMode ? [...productNavigation, ...developerNavigation] : [...productNavigation]),
+    [developerMode],
+  );
+
+  const handleToggleDeveloperMode = useCallback((value: boolean) => {
+    setDeveloperMode(value);
+    try {
+      localStorage.setItem(DEVELOPER_MODE_STORAGE_KEY, String(value));
+    } catch {
+      // ignore persistence failures
+    }
+    // Leaving developer mode while viewing a dev-only page falls back to Settings.
+    if (!value) {
+      setActiveSection((current) =>
+        developerNavigation.some((item) => item.id === current) ? "settings" : current,
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (mixerChannelSettings.isLoading || mixerSettingsAppliedRef.current) {
@@ -505,16 +545,19 @@ export default function App() {
     equalizer: <EqualizerView />,
     noise: <NoiseView />,
     profiles: <ProfilesView profiles={profiles} onActivate={activateProfile} />,
+    audioRouting: <AudioRoutingView audappChannelEndpoints={audappChannelEndpoints} />,
     settings: (
       <SettingsView
         settings={settings}
         engineStatus={engineStatus}
         appVersion={appVersion}
+        developerMode={developerMode}
         onToggle={(key, value) => setSettings((current) => ({ ...current, [key]: value }))}
         onLatencyModeChange={(value) => {
           setSettings((current) => ({ ...current, latencyMode: value }));
           setEngineStatus((current) => ({ ...current, latencyMode: value }));
         }}
+        onToggleDeveloperMode={handleToggleDeveloperMode}
       />
     ),
     engine: (
@@ -535,7 +578,7 @@ export default function App() {
   return (
     <AudioDspProvider>
     <AppShell
-      items={[...navigation]}
+      items={navigation}
       activeSection={activeSection}
       onSelectSection={(section) => {
         startTransition(() => setActiveSection(section));

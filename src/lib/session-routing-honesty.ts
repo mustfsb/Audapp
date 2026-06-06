@@ -1,5 +1,5 @@
 import type { ResolvedInternalChannel } from "@/lib/channel-workflow";
-import type { AudioDiscoveryDevice } from "@/types/discovery";
+import type { AudappOutputChannelId, AudioDiscoveryDevice } from "@/types/discovery";
 import type { AudioSessionView } from "@/types/session-view";
 
 export type SessionRoutingHonesty = {
@@ -7,6 +7,62 @@ export type SessionRoutingHonesty = {
   actualEndpointLabel: string;
   actualEndpointKnown: boolean;
 };
+
+export type RoutingMatchStatus = {
+  /** True when the actual Windows endpoint is the requested Audapp channel. */
+  matches: boolean;
+  status: "ok" | "warning" | "info" | "neutral";
+  statusLabel: string;
+  /** Short user-facing guidance, or null when no action is needed. */
+  helperText: string | null;
+};
+
+/**
+ * Compare the requested Audapp channel against the actual Windows endpoint and
+ * describe the gap in product language. This never claims an automatic move
+ * happened — when they differ, it tells the user to switch the output in the
+ * Windows Volume Mixer.
+ */
+export function summarizeRoutingMatch(
+  requestedChannelId: AudappOutputChannelId,
+  honesty: SessionRoutingHonesty,
+): RoutingMatchStatus {
+  if (!honesty.actualEndpointKnown) {
+    return {
+      matches: false,
+      status: "neutral",
+      statusLabel: "Output unknown",
+      helperText: null,
+    };
+  }
+
+  const actual = honesty.actualEndpointLabel.toLowerCase();
+
+  if (actual.includes(`audapp ${requestedChannelId}`)) {
+    return {
+      matches: true,
+      status: "ok",
+      statusLabel: `Routed to ${honesty.requestedChannelLabel}`,
+      helperText: null,
+    };
+  }
+
+  if (actual.includes("audapp")) {
+    return {
+      matches: false,
+      status: "warning",
+      statusLabel: "Manual move needed",
+      helperText: `Set this app's output to ${honesty.requestedChannelLabel} in Windows Volume Mixer to match.`,
+    };
+  }
+
+  return {
+    matches: false,
+    status: "info",
+    statusLabel: "Not on Audapp",
+    helperText: "This app is playing on a non-Audapp output.",
+  };
+}
 
 export function summarizeSessionRoutingHonesty(
   session: Pick<AudioSessionView, "deviceId" | "routeStatus">,
