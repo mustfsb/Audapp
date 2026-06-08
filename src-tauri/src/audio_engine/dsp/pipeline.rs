@@ -221,6 +221,34 @@ impl DspPipeline {
         self.in_lp_states[ci].process(y, &lp)
     }
 
+    /// Process one per-source channel sample, applied BEFORE the multichannel mix.
+    /// Full chain: input gain → HP → EQ → LP → output gain.
+    /// Deliberately omits the limiter — the master pipeline after the mix provides
+    /// output protection, so per-channel stages stay transparent when summed.
+    #[inline]
+    pub fn process_channel_sample(&mut self, x: f32, channel_index: usize) -> f32 {
+        if !self.snapshot.enabled || !self.snapshot.supported {
+            return x;
+        }
+        let ch_count = self.in_hp_states.len();
+        if ch_count == 0 {
+            return x;
+        }
+        let ci = channel_index % ch_count;
+        let y = x * self.snapshot.input_gain;
+        let hp = self.in_hp_coeffs;
+        let lp = self.in_lp_coeffs;
+        let mut y = self.in_hp_states[ci].process(y, &hp);
+        if self.snapshot.eq_enabled {
+            for i in 0..NUM_EQ_BANDS {
+                let c = self.in_eq_coeffs[i];
+                y = self.in_eq_states[ci][i].process(y, &c);
+            }
+        }
+        let y = self.in_lp_states[ci].process(y, &lp);
+        y * self.snapshot.output_gain
+    }
+
     /// Process one routing sample (capture → DSP → render path).
     /// Full chain: input gain → HP → EQ → LP → limiter (per channel).
     #[inline]
@@ -244,6 +272,7 @@ impl DspPipeline {
             }
         }
         let y = self.in_lp_states[ci].process(y, &lp);
+        let y = y * self.snapshot.output_gain;
         if self.snapshot.limiter_enabled {
             soft_limit(y)
         } else {

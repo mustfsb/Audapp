@@ -1,14 +1,21 @@
 use std::sync::{Mutex, OnceLock};
+use std::path::Path;
 
 use crate::audio::{capture_discovery_snapshot, AudioDiscoveryDevice};
 use crate::audio_bridge::{
     is_active_physical_output, multichannel_bridge_is_running, multichannel_bridge_shutdown,
     multichannel_bridge_start, multichannel_bridge_status, multichannel_bridge_stop,
-    resolve_multichannel_start_from_devices, resolve_physical_output_candidate, BridgeState,
-    RenderEndpointInfo, ResolvedMultichannelStart,
+    resolve_multichannel_start_from_devices, resolve_physical_output_candidate,
+    resolve_physical_output_candidate_with_preferences, BridgeState, RenderEndpointInfo,
+    ResolvedMultichannelStart,
 };
 use crate::audio_policy::default_endpoint::set_default_render_endpoint;
-use crate::audio_policy::types::RoutingStatus;
+use crate::audio_policy::preferences::{
+    load_output_preferences, save_output_preferences, PersistedOutputPreferences,
+};
+use crate::audio_policy::types::{
+    OutputPreferencesStatus, RoutingStatus, SavedOutputDevicePreference,
+};
 
 static ROUTING: OnceLock<Mutex<RoutingState>> = OnceLock::new();
 
@@ -26,6 +33,10 @@ struct RoutingState {
     audapp_default_name: Option<String>,
     selected_output_id: Option<String>,
     selected_output_name: Option<String>,
+    primary_output: Option<SavedOutputDevicePreference>,
+    fallback_output: Option<SavedOutputDevicePreference>,
+    resolution_reason: Option<String>,
+    resolution_message: Option<String>,
     auto_started: bool,
     last_error: Option<String>,
 }
@@ -34,9 +45,109 @@ struct RoutingEnablePlan {
     start: ResolvedMultichannelStart,
     previous_default_id: Option<String>,
     previous_default_name: Option<String>,
+    resolution_reason: Option<String>,
+    resolution_message: Option<String>,
 }
 
 // ---- Public API ----
+
+pub fn init_output_preferences(data_dir: &Path) {
+    let loaded = load_output_preferences(data_dir);
+    let mut state = global().lock().unwrap_or_else(|p| p.into_inner());
+    state.primary_output = loaded.primary_output;
+    state.fallback_output = loaded.fallback_output;
+}
+
+pub fn get_output_preferences_status() -> OutputPreferencesStatus {
+    let state = global().lock().unwrap_or_else(|p| p.into_inner());
+    OutputPreferencesStatus {
+        primary_output: state.primary_output.clone(),
+        fallback_output: state.fallback_output.clone(),
+        resolved_output_id: state.selected_output_id.clone(),
+        resolved_output_name: state.selected_output_name.clone(),
+        resolution_reason: state.resolution_reason.clone(),
+        resolution_message: state.resolution_message.clone(),
+    }
+}
+
+pub fn set_output_preference(
+    data_dir: &Path,
+    slot: &str,
+    output_endpoint_id: &str,
+) -> Result<OutputPreferencesStatus, String> {
+    let snapshot = capture_discovery_snapshot();
+    let device = snapshot
+        .devices
+        .iter()
+        .find(|device| device.id == output_endpoint_id)
+        .ok_or_else(|| format!("Output device not found: {output_endpoint_id}"))?;
+
+    if !is_active_physical_output(device) {
+        return Err(
+            "Only active, non-Audapp physical output devices can be used as output preferences."
+                .to_string(),
+        );
+    }
+
+    let preference = SavedOutputDevicePreference {
+        endpoint_id: device.id.clone(),
+        name: device.name.clone(),
+        last_seen_at: chrono::Utc::now().to_rfc3339(),
+    };
+
+    {
+        let mut state = global().lock().unwrap_or_else(|p| p.into_inner());
+        match slot {
+            "primary" => {
+                state.primary_output = Some(preference.clone());
+                if state
+                    .fallback_output
+                    .as_ref()
+                    .map(|item| item.endpoint_id == preference.endpoint_id)
+                    .unwrap_or(false)
+                {
+                    state.fallback_output = None;
+                }
+            }
+            "fallback" => {
+                state.fallback_output = Some(preference.clone());
+                if state
+                    .primary_output
+                    .as_ref()
+                    .map(|item| item.endpoint_id == preference.endpoint_id)
+                    .unwrap_or(false)
+                {
+                    state.primary_output = None;
+                }
+            }
+            _ => return Err(format!("Unknown output preference slot: {slot}")),
+        }
+        state.resolution_reason = None;
+        state.resolution_message = None;
+    }
+
+    persist_output_preferences(data_dir)?;
+    Ok(get_output_preferences_status())
+}
+
+pub fn clear_output_preference(
+    data_dir: &Path,
+    slot: &str,
+) -> Result<OutputPreferencesStatus, String> {
+    {
+        let mut state = global().lock().unwrap_or_else(|p| p.into_inner());
+        match slot {
+            "primary" => state.primary_output = None,
+            "fallback" => state.fallback_output = None,
+            _ => return Err(format!("Unknown output preference slot: {slot}")),
+        }
+        state.resolution_reason = None;
+        state.resolution_message = None;
+    }
+
+    persist_output_preferences(data_dir)?;
+    Ok(get_output_preferences_status())
+}
 
 pub fn routing_get_status() -> RoutingStatus {
     let state = {
@@ -107,9 +218,13 @@ pub fn routing_enable(output_endpoint_id: String) -> Result<RoutingStatus, Strin
         ));
     }
 
-    let previous_restore_target_id = {
+    let (previous_restore_target_id, primary_output, fallback_output) = {
         let state = global().lock().unwrap_or_else(|p| p.into_inner());
-        state.previous_default_id.clone()
+        (
+            state.previous_default_id.clone(),
+            state.primary_output.clone(),
+            state.fallback_output.clone(),
+        )
     };
 
     let snapshot = capture_discovery_snapshot();
@@ -121,6 +236,8 @@ pub fn routing_enable(output_endpoint_id: String) -> Result<RoutingStatus, Strin
         current_default_id.as_deref(),
         current_default_name.as_deref(),
         Some(output_endpoint_id.as_str()),
+        primary_output.as_ref(),
+        fallback_output.as_ref(),
         previous_restore_target_id.as_deref(),
         false,
     )
@@ -177,10 +294,11 @@ pub fn routing_auto_start() {
         return;
     }
 
-    let (preferred_output_id, previous_restore_target_id) = {
+    let (primary_output, fallback_output, previous_restore_target_id) = {
         let state = global().lock().unwrap_or_else(|p| p.into_inner());
         (
-            state.selected_output_id.clone(),
+            state.primary_output.clone(),
+            state.fallback_output.clone(),
             state.previous_default_id.clone(),
         )
     };
@@ -199,7 +317,9 @@ pub fn routing_auto_start() {
         &snapshot.devices,
         current_default_id.as_deref(),
         current_default_name.as_deref(),
-        preferred_output_id.as_deref(),
+        None,
+        primary_output.as_ref(),
+        fallback_output.as_ref(),
         previous_restore_target_id.as_deref(),
         true,
     ) {
@@ -269,6 +389,8 @@ fn activate_routing_plan(plan: RoutingEnablePlan) -> Result<RoutingStatus, Strin
             state.audapp_default_name = Some(plan.start.general_name.clone());
             state.selected_output_id = Some(plan.start.config.output_endpoint_id.clone());
             state.selected_output_name = Some(plan.start.output_name.clone());
+            state.resolution_reason = plan.resolution_reason.clone();
+            state.resolution_message = plan.resolution_message.clone();
             state.auto_started = plan.start.config.auto_started;
             state.last_error = None;
             drop(state);
@@ -307,6 +429,8 @@ fn store_plan_error(plan: &RoutingEnablePlan, base_message: String, try_restore:
     state.audapp_default_name = Some(plan.start.general_name.clone());
     state.selected_output_id = Some(plan.start.config.output_endpoint_id.clone());
     state.selected_output_name = Some(plan.start.output_name.clone());
+    state.resolution_reason = plan.resolution_reason.clone();
+    state.resolution_message = plan.resolution_message.clone();
     state.auto_started = plan.start.config.auto_started;
     state.last_error = Some(message.clone());
     message
@@ -320,23 +444,53 @@ fn record_failure(message: String) -> String {
     message
 }
 
+fn persist_output_preferences(data_dir: &Path) -> Result<(), String> {
+    let state = global().lock().unwrap_or_else(|p| p.into_inner());
+    let preferences = PersistedOutputPreferences {
+        primary_output: state.primary_output.clone(),
+        fallback_output: state.fallback_output.clone(),
+    };
+    drop(state);
+    save_output_preferences(data_dir, &preferences)
+}
+
 fn build_routing_enable_plan(
     devices: &[AudioDiscoveryDevice],
     current_default_id: Option<&str>,
-    current_default_name: Option<&str>,
-    saved_selected_output_id: Option<&str>,
+    _current_default_name: Option<&str>,
+    explicit_output_id: Option<&str>,
+    primary_output: Option<&SavedOutputDevicePreference>,
+    fallback_output: Option<&SavedOutputDevicePreference>,
     previous_restore_target_id: Option<&str>,
     auto_started: bool,
 ) -> Result<RoutingEnablePlan, String> {
-    // 1. Resolve the physical (non-Audapp) render output FIRST. This is guaranteed
-    //    to never be an Audapp endpoint, even when the current Windows default is
-    //    Audapp Input / Audapp General / etc.
-    let physical_output = resolve_physical_output_candidate(
-        devices,
-        saved_selected_output_id,
-        previous_restore_target_id,
-        current_default_id,
-    )?;
+    let (physical_output, resolution_reason, resolution_message) = if let Some(device_id) =
+        explicit_output_id
+    {
+        (
+            resolve_physical_output_candidate(
+                devices,
+                Some(device_id),
+                previous_restore_target_id,
+                current_default_id,
+            )?,
+            None,
+            None,
+        )
+    } else {
+        let resolved = resolve_physical_output_candidate_with_preferences(
+            devices,
+            primary_output,
+            fallback_output,
+            previous_restore_target_id,
+            current_default_id,
+        )?;
+        (
+            resolved.endpoint,
+            resolved.resolution_reason,
+            resolved.resolution_message,
+        )
+    };
 
     // 2. Build the multi-channel start config against that physical output.
     let start =
@@ -350,6 +504,8 @@ fn build_routing_enable_plan(
         start,
         previous_default_id,
         previous_default_name,
+        resolution_reason,
+        resolution_message,
     })
 }
 
@@ -521,6 +677,14 @@ fn get_friendly_name(device: &windows::Win32::Media::Audio::IMMDevice) -> String
 mod tests {
     use super::*;
 
+    fn preference(id: &str, name: &str) -> SavedOutputDevicePreference {
+        SavedOutputDevicePreference {
+            endpoint_id: id.to_string(),
+            name: name.to_string(),
+            last_seen_at: "2026-06-08T00:00:00Z".to_string(),
+        }
+    }
+
     fn output_device(
         id: &str,
         name: &str,
@@ -588,6 +752,8 @@ mod tests {
             Some("Speakers (USB Audio Device)"),
             Some("speaker-id"),
             None,
+            None,
+            None,
             false,
         )
         .expect("plan");
@@ -604,6 +770,8 @@ mod tests {
             Some("browser-id"),
             Some("Hoparlor (Audapp Browser)"),
             Some("speaker-id"),
+            None,
+            None,
             None,
             true,
         )
@@ -630,11 +798,59 @@ mod tests {
             Some("Hoparlor (Audapp Input)"),
             None,
             None,
+            None,
+            None,
             true,
         )
         .expect("plan");
 
         assert_eq!(plan.previous_default_id.as_deref(), Some("speaker-id"));
         assert_eq!(plan.start.config.output_endpoint_id, "speaker-id");
+    }
+
+    #[test]
+    fn routing_auto_start_prefers_saved_primary_then_fallback_preferences() {
+        let mut devices = baseline_devices();
+        devices.push(output_device(
+            "hdmi-id",
+            "Monitor (HDMI Audio)",
+            false,
+            None,
+            None,
+        ));
+
+        let plan = build_routing_enable_plan(
+            &devices,
+            Some("browser-id"),
+            Some("Hoparlor (Audapp Browser)"),
+            None,
+            Some(&preference("speaker-id", "Speakers (USB Audio Device)")),
+            Some(&preference("hdmi-id", "Monitor (HDMI Audio)")),
+            None,
+            true,
+        )
+        .expect("plan");
+
+        assert_eq!(plan.start.config.output_endpoint_id, "speaker-id");
+        assert_eq!(plan.resolution_reason.as_deref(), Some("primary"));
+
+        let plan = build_routing_enable_plan(
+            &devices,
+            Some("browser-id"),
+            Some("Hoparlor (Audapp Browser)"),
+            None,
+            Some(&preference("missing-id", "Missing Speakers")),
+            Some(&preference("hdmi-id", "Monitor (HDMI Audio)")),
+            None,
+            true,
+        )
+        .expect("plan");
+
+        assert_eq!(plan.start.config.output_endpoint_id, "hdmi-id");
+        assert_eq!(plan.resolution_reason.as_deref(), Some("fallback"));
+        assert_eq!(
+            plan.resolution_message.as_deref(),
+            Some("Primary output not found. Using fallback: Monitor (HDMI Audio).")
+        );
     }
 }

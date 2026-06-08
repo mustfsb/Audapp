@@ -35,10 +35,10 @@ pub struct DspConfigShared {
     pub sample_format_tag: AtomicU32,      // 0=unknown, 1=f32, 2=i16, 3=other
 }
 
-static DSP_CONFIG: OnceLock<DspConfigShared> = OnceLock::new();
-
-pub fn global() -> &'static DspConfigShared {
-    DSP_CONFIG.get_or_init(|| {
+impl DspConfigShared {
+    /// Build a standalone shared-config instance from defaults. Used for the
+    /// global master DSP and for each per-channel DSP slot.
+    pub fn new_default() -> Self {
         let d = DspRuntimeConfig::default();
         DspConfigShared {
             enabled: AtomicBool::new(d.enabled),
@@ -71,7 +71,20 @@ pub fn global() -> &'static DspConfigShared {
             unsupported_reason_idx: AtomicU32::new(0),
             sample_format_tag: AtomicU32::new(0),
         }
-    })
+    }
+
+    /// Build a standalone shared-config instance and apply the given config.
+    pub fn from_config(config: &DspRuntimeConfig) -> Self {
+        let shared = Self::new_default();
+        set_config_into(&shared, config.clone());
+        shared
+    }
+}
+
+static DSP_CONFIG: OnceLock<DspConfigShared> = OnceLock::new();
+
+pub fn global() -> &'static DspConfigShared {
+    DSP_CONFIG.get_or_init(DspConfigShared::new_default)
 }
 
 fn clamp_config(c: DspRuntimeConfig) -> DspRuntimeConfig {
@@ -125,8 +138,12 @@ fn detect_preset(band_gains: &[f32]) -> EqPreset {
 }
 
 pub fn get_config() -> DspRuntimeConfig {
+    get_config_from(global())
+}
+
+/// Read the current runtime config from any shared-config instance.
+pub fn get_config_from(g: &DspConfigShared) -> DspRuntimeConfig {
     use super::eq::EQ_FREQUENCIES;
-    let g = global();
     let eq_bands: Vec<EqBandConfig> = (0..NUM_EQ_BANDS)
         .map(|i| EqBandConfig {
             id: format!("band_{}hz", EQ_FREQUENCIES[i] as u32),
@@ -152,8 +169,12 @@ pub fn get_config() -> DspRuntimeConfig {
 }
 
 pub fn set_config(config: DspRuntimeConfig) -> DspRuntimeStatus {
+    set_config_into(global(), config)
+}
+
+/// Apply a runtime config to any shared-config instance (clamping + preset detection).
+pub fn set_config_into(g: &DspConfigShared, config: DspRuntimeConfig) -> DspRuntimeStatus {
     let c = clamp_config(config);
-    let g = global();
     g.enabled.store(c.enabled, Ordering::Relaxed);
     g.output_gain_db.store(c.output_gain_db.to_bits(), Ordering::Relaxed);
     g.input_gain_db.store(c.input_gain_db.to_bits(), Ordering::Relaxed);
@@ -172,14 +193,18 @@ pub fn set_config(config: DspRuntimeConfig) -> DspRuntimeStatus {
     let detected = detect_preset(&band_gains);
     g.eq_preset_idx.store(detected.to_index(), Ordering::Relaxed);
     g.version.fetch_add(1, Ordering::Relaxed);
-    get_status()
+    get_status_from(g)
 }
 
 /// Apply a named preset: sets band gains, enables EQ, bumps version.
 pub fn set_eq_preset(name: &str) -> DspRuntimeStatus {
+    set_eq_preset_into(global(), name)
+}
+
+/// Apply a named preset to any shared-config instance.
+pub fn set_eq_preset_into(g: &DspConfigShared, name: &str) -> DspRuntimeStatus {
     let preset = EqPreset::from_str(name);
     let gains = preset_band_gains(preset);
-    let g = global();
     for (i, &gain) in gains.iter().enumerate().take(NUM_EQ_BANDS) {
         g.eq_band_gains[i].store(gain.to_bits(), Ordering::Relaxed);
         g.eq_band_enabled[i].store(true, Ordering::Relaxed);
@@ -190,7 +215,7 @@ pub fn set_eq_preset(name: &str) -> DspRuntimeStatus {
     }
     g.eq_preset_idx.store(preset.to_index(), Ordering::Relaxed);
     g.version.fetch_add(1, Ordering::Relaxed);
-    get_status()
+    get_status_from(g)
 }
 
 pub fn reset_config() -> DspRuntimeConfig {
@@ -199,7 +224,11 @@ pub fn reset_config() -> DspRuntimeConfig {
 }
 
 pub fn get_status() -> DspRuntimeStatus {
-    let g = global();
+    get_status_from(global())
+}
+
+/// Read engine-reported status from any shared-config instance.
+pub fn get_status_from(g: &DspConfigShared) -> DspRuntimeStatus {
     let version = g.version.load(Ordering::Relaxed);
     let active = g.active_in_engine.load(Ordering::Relaxed);
     let supported = g.supported.load(Ordering::Relaxed);

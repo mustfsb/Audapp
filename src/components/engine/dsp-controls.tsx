@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,29 +11,63 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { withBandGain } from "@/lib/channel-eq";
 import { cn } from "@/lib/utils";
-import type { useAudioDsp } from "@/lib/use-audio-dsp";
+import type { DspRuntimeConfig, DspRuntimeStatus } from "@/types/audio-engine";
 
-type DspHook = ReturnType<typeof useAudioDsp>;
+const SIMPLE_BANDS = [
+  { label: "Bass", index: 0 },
+  { label: "Voice", index: 2 },
+  { label: "Treble", index: 4 },
+] as const;
+
+/**
+ * Structural model shared by the master DSP hook (`useAudioDsp`) and the
+ * per-channel DSP hook (`useChannelDsp`). Either can drive `DspControls`.
+ */
+export interface DspControlsModel {
+  config: DspRuntimeConfig;
+  status: DspRuntimeStatus | null;
+  isLoading: boolean;
+  error: string | null;
+  setConfig: (config: DspRuntimeConfig) => void;
+  commitConfig: (config: DspRuntimeConfig) => Promise<void> | void;
+  setPreset: (preset: string) => Promise<void> | void;
+  reset: () => Promise<void> | void;
+}
 
 interface DspControlsProps {
-  dsp: DspHook;
+  dsp: DspControlsModel;
   footerNote?: string;
+  title?: string;
+  showOutputGain?: boolean;
   showInputGain?: boolean;
   showFilters?: boolean;
+  showLimiter?: boolean;
+  showEqControls?: boolean;
+  presetTriggerClassName?: string;
+  presetContentClassName?: string;
 }
 
 export function DspControls({
   dsp,
   footerNote = "DSP and EQ apply only to Engine Lab streams. They do not affect app audio, channel routing, microphone enhancement, or system output.",
+  title = "DSP / EQ",
+  showOutputGain = true,
   showInputGain = true,
   showFilters = true,
+  showLimiter = true,
+  showEqControls = true,
+  presetTriggerClassName,
+  presetContentClassName,
 }: DspControlsProps) {
+  const [eqMode, setEqMode] = useState<"simple" | "detailed">("simple");
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">
-          DSP / EQ
+          {title}
         </p>
         {dsp.status && (
           <Badge
@@ -64,21 +100,23 @@ export function DspControls({
           />
         </div>
 
-        <SliderRow
-          label="Output gain"
-          value={`${dsp.config.outputGainDb > 0 ? "+" : ""}${dsp.config.outputGainDb.toFixed(1)} dB`}
-          min={-24}
-          max={12}
-          step={0.5}
-          sliderValue={[dsp.config.outputGainDb]}
-          disabled={!dsp.config.enabled || dsp.isLoading}
-          onValueChange={([v]) => {
-            if (v !== undefined) dsp.setConfig({ ...dsp.config, outputGainDb: v });
-          }}
-          onValueCommit={([v]) => {
-            if (v !== undefined) void dsp.commitConfig({ ...dsp.config, outputGainDb: v });
-          }}
-        />
+        {showOutputGain && (
+          <SliderRow
+            label="Output gain"
+            value={`${dsp.config.outputGainDb > 0 ? "+" : ""}${dsp.config.outputGainDb.toFixed(1)} dB`}
+            min={-24}
+            max={24}
+            step={0.5}
+            sliderValue={[dsp.config.outputGainDb]}
+            disabled={!dsp.config.enabled || dsp.isLoading}
+            onValueChange={([v]) => {
+              if (v !== undefined) dsp.setConfig({ ...dsp.config, outputGainDb: v });
+            }}
+            onValueCommit={([v]) => {
+              if (v !== undefined) void dsp.commitConfig({ ...dsp.config, outputGainDb: v });
+            }}
+          />
+        )}
 
         {showInputGain && (
           <SliderRow
@@ -98,17 +136,19 @@ export function DspControls({
           />
         )}
 
-        <div className="flex items-center justify-between px-4 py-3">
-          <span className="text-sm text-muted-foreground">Output limiter</span>
-          <Switch
-            size="sm"
-            checked={dsp.config.limiterEnabled}
-            disabled={!dsp.config.enabled || dsp.isLoading}
-            onCheckedChange={(checked) =>
-              void dsp.commitConfig({ ...dsp.config, limiterEnabled: checked })
-            }
-          />
-        </div>
+        {showLimiter && (
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm text-muted-foreground">Output limiter</span>
+            <Switch
+              size="sm"
+              checked={dsp.config.limiterEnabled}
+              disabled={!dsp.config.enabled || dsp.isLoading}
+              onCheckedChange={(checked) =>
+                void dsp.commitConfig({ ...dsp.config, limiterEnabled: checked })
+              }
+            />
+          </div>
+        )}
 
         {showFilters && (
           <>
@@ -174,83 +214,116 @@ export function DspControls({
           </>
         )}
 
-        <div className="flex items-center gap-3 px-4 py-3">
-          <span className="w-28 shrink-0 text-sm">EQ Bands</span>
-          <Switch
-            size="sm"
-            checked={dsp.config.eqEnabled}
-            disabled={!dsp.config.enabled || dsp.isLoading}
-            onCheckedChange={(checked) =>
-              void dsp.commitConfig({ ...dsp.config, eqEnabled: checked })
-            }
-          />
-          <Select
-            value={dsp.config.eqPreset}
-            onValueChange={(v) => void dsp.setPreset(v)}
-            disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
-          >
-            <SelectTrigger className="h-7 text-xs flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="flat">Flat</SelectItem>
-              <SelectItem value="gaming">Gaming</SelectItem>
-              <SelectItem value="music">Music</SelectItem>
-              <SelectItem value="voice_clarity">Voice Clarity</SelectItem>
-              <SelectItem value="bass_boost">Bass Boost</SelectItem>
-              {dsp.config.eqPreset === "custom" && (
-                <SelectItem value="custom">Custom</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
+        {showEqControls && (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="w-28 shrink-0 text-sm">EQ Bands</span>
+            <Switch
+              size="sm"
+              checked={dsp.config.eqEnabled}
+              disabled={!dsp.config.enabled || dsp.isLoading}
+              onCheckedChange={(checked) =>
+                void dsp.commitConfig({ ...dsp.config, eqEnabled: checked })
+              }
+            />
+            <Select
+              value={dsp.config.eqPreset}
+              onValueChange={(v) => void dsp.setPreset(v)}
+              disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
+            >
+              <SelectTrigger className={cn("h-9 text-xs flex-1", presetTriggerClassName)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={presetContentClassName}>
+                <SelectItem value="flat">Flat</SelectItem>
+                <SelectItem value="gaming">Gaming</SelectItem>
+                <SelectItem value="music">Music</SelectItem>
+                <SelectItem value="voice_clarity">Voice Clarity</SelectItem>
+                <SelectItem value="bass_boost">Bass Boost</SelectItem>
+                {dsp.config.eqPreset === "custom" && (
+                  <SelectItem value="custom">Custom</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            <button
+              onClick={() => setEqMode((m) => (m === "simple" ? "detailed" : "simple"))}
+              className="shrink-0 text-[11px] text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+            >
+              {eqMode === "simple" ? "Detailed" : "Simple"}
+            </button>
+          </div>
+        )}
 
-        {dsp.config.eqBands.length > 0 && (
+        {showEqControls && dsp.config.eqBands.length > 0 && (
           <div className="px-4 py-3">
-            <div className="grid grid-cols-5 gap-3">
-              {dsp.config.eqBands.map((band, idx) => {
-                const label =
-                  band.frequencyHz >= 1000
-                    ? `${band.frequencyHz / 1000}k`
-                    : `${band.frequencyHz}`;
-                return (
-                  <div key={band.id} className="flex flex-col items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground">{label}</span>
-                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                      {band.gainDb > 0 ? "+" : ""}
-                      {band.gainDb.toFixed(1)}
-                    </span>
-                    <Slider
-                      min={-12}
-                      max={12}
-                      step={0.5}
-                      value={[band.gainDb]}
-                      disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
-                      orientation="vertical"
-                      className="h-16"
-                      onValueChange={([v]) => {
-                        if (v === undefined) return;
-                        const newBands = dsp.config.eqBands.map((b, i) =>
-                          i === idx ? { ...b, gainDb: v } : b,
-                        );
-                        dsp.setConfig({ ...dsp.config, eqBands: newBands, eqPreset: "custom" });
-                      }}
-                      onValueCommit={([v]) => {
-                        if (v === undefined) return;
-                        const newBands = dsp.config.eqBands.map((b, i) =>
-                          i === idx ? { ...b, gainDb: v } : b,
-                        );
-                        void dsp.commitConfig({
-                          ...dsp.config,
-                          eqBands: newBands,
-                          eqPreset: "custom",
-                        });
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            {eqMode === "simple" ? (
+              /* Simple mode: Bass, Voice, Treble macro sliders */
+              <div className="space-y-2">
+                {SIMPLE_BANDS.map(({ label, index }) => {
+                  const band = dsp.config.eqBands[index];
+                  if (!band) return null;
+                  return (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className="w-12 shrink-0 text-xs text-muted-foreground">{label}</span>
+                      <Slider
+                        min={-12}
+                        max={12}
+                        step={0.5}
+                        value={[band.gainDb]}
+                        disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
+                        className="flex-1"
+                        onValueChange={([v]) => {
+                          if (v === undefined) return;
+                          dsp.setConfig(withBandGain(dsp.config, index, v));
+                        }}
+                        onValueCommit={([v]) => {
+                          if (v === undefined) return;
+                          void dsp.commitConfig(withBandGain(dsp.config, index, v));
+                        }}
+                      />
+                      <span className="w-14 text-right text-xs tabular-nums text-muted-foreground">
+                        {band.gainDb > 0 ? "+" : ""}{band.gainDb.toFixed(1)} dB
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Detailed mode: 5-band vertical sliders */
+              <div className="grid grid-cols-5 gap-3">
+                {dsp.config.eqBands.map((band, idx) => {
+                  const label =
+                    band.frequencyHz >= 1000
+                      ? `${band.frequencyHz / 1000}k`
+                      : `${band.frequencyHz}`;
+                  return (
+                    <div key={band.id} className="flex flex-col items-center gap-1.5">
+                      <span className="text-[10px] text-muted-foreground">{label}</span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                        {band.gainDb > 0 ? "+" : ""}
+                        {band.gainDb.toFixed(1)}
+                      </span>
+                      <Slider
+                        min={-12}
+                        max={12}
+                        step={0.5}
+                        value={[band.gainDb]}
+                        disabled={!dsp.config.enabled || !dsp.config.eqEnabled || dsp.isLoading}
+                        orientation="vertical"
+                        className="h-16"
+                        onValueChange={([v]) => {
+                          if (v === undefined) return;
+                          dsp.setConfig(withBandGain(dsp.config, idx, v));
+                        }}
+                        onValueCommit={([v]) => {
+                          if (v === undefined) return;
+                          void dsp.commitConfig(withBandGain(dsp.config, idx, v));
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

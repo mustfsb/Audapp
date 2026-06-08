@@ -25,6 +25,10 @@ pub fn run() {
                 audio_engine::dsp_load_and_apply_persisted(&data_dir);
                 let mixer_settings = audio::load_mixer_channel_settings(&data_dir);
                 audio_bridge::init_runtime_channel_config(&mixer_settings);
+                let channel_dsp_configs =
+                    audio_bridge::channel_dsp::load_channel_dsp_configs(&data_dir);
+                audio_bridge::channel_dsp::init_channel_dsp(&channel_dsp_configs);
+                audio_policy::init_output_preferences(&data_dir);
             } else {
                 audio_bridge::init_runtime_channel_config(&[]);
             }
@@ -69,9 +73,16 @@ pub fn run() {
             bridge_commands::list_multichannel_bridge_candidates,
             bridge_commands::start_multichannel_bridge,
             bridge_commands::stop_multichannel_bridge,
+            bridge_commands::get_channel_dsp_config,
+            bridge_commands::set_channel_dsp_config,
+            bridge_commands::set_channel_eq_preset,
+            bridge_commands::get_all_channel_dsp_configs,
             routing_commands::routing_get_status_cmd,
             routing_commands::routing_enable_system,
             routing_commands::routing_disable_system,
+            routing_commands::get_output_preferences_status_cmd,
+            routing_commands::set_output_preference_cmd,
+            routing_commands::clear_output_preference_cmd,
             voice_lab_commands::voice_list_input_devices,
             voice_lab_commands::voice_list_monitor_outputs,
             voice_lab_commands::voice_start_lab,

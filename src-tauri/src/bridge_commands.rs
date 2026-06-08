@@ -1,9 +1,14 @@
+use tauri::Manager;
+
 use crate::audio_bridge::{
     bridge_list_candidates, bridge_start, bridge_status, bridge_stop,
-    multichannel_bridge_list_candidates, multichannel_bridge_start,
-    multichannel_bridge_status, multichannel_bridge_stop, resolve_multichannel_start,
-    BridgeCandidates, BridgePocConfig, BridgePocStatus, MultichannelBridgeCandidates,
-    MultichannelBridgeStatus,
+    channel_dsp::{
+        get_all_channel_dsps, get_channel_dsp, save_channel_dsp_configs, set_channel_dsp,
+        ChannelDspConfig,
+    },
+    multichannel_bridge_list_candidates, multichannel_bridge_start, multichannel_bridge_status,
+    multichannel_bridge_stop, resolve_multichannel_start, BridgeCandidates, BridgePocConfig,
+    BridgePocStatus, MultichannelBridgeCandidates, MultichannelBridgeStatus,
 };
 
 #[tauri::command]
@@ -61,4 +66,39 @@ pub fn start_multichannel_bridge(
 #[tauri::command]
 pub fn stop_multichannel_bridge() -> MultichannelBridgeStatus {
     multichannel_bridge_stop()
+}
+
+#[tauri::command]
+pub fn get_channel_dsp_config(channel_id: String) -> Result<ChannelDspConfig, String> {
+    get_channel_dsp(&channel_id).ok_or_else(|| format!("Unknown channel: {channel_id}"))
+}
+
+#[tauri::command]
+pub fn set_channel_dsp_config(
+    app: tauri::AppHandle,
+    config: ChannelDspConfig,
+) -> Result<ChannelDspConfig, String> {
+    let saved = set_channel_dsp(config)?;
+    if let Ok(data_dir) = app.path().app_local_data_dir() {
+        let _ = save_channel_dsp_configs(&data_dir);
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn set_channel_eq_preset(
+    app: tauri::AppHandle,
+    channel_id: String,
+    preset: String,
+) -> Result<ChannelDspConfig, String> {
+    let config = crate::audio_bridge::channel_dsp::set_channel_eq_preset(&channel_id, &preset)?;
+    if let Ok(data_dir) = app.path().app_local_data_dir() {
+        let _ = save_channel_dsp_configs(&data_dir);
+    }
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn get_all_channel_dsp_configs() -> Vec<ChannelDspConfig> {
+    get_all_channel_dsps()
 }

@@ -1,7 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import {
-  mockDevices,
   mockEngineStatus,
   mockProfiles,
   mockSettings,
@@ -102,8 +101,6 @@ export default function App() {
   );
   const [profiles, setProfiles] = useState<AudioProfile[]>(mockProfiles);
   const [settings, setSettings] = useState<AppSettings>(mockSettings);
-  const [selectedOutputId, setSelectedOutputId] = useState("out-1");
-  const [selectedInputId, setSelectedInputId] = useState("in-1");
 
   // Solo state — in-memory only (not persisted)
   const [soloedChannelIds, setSoloedChannelIds] = useState<Set<string>>(new Set());
@@ -381,21 +378,6 @@ export default function App() {
     [discoverySessions, resolveChannelForSession, sessionControl, channels, mixerChannelSettings],
   );
 
-  const assignmentCountsByChannel = useMemo(() => {
-    const counts = Object.fromEntries(channels.map((channel) => [channel.id, 0])) as Record<
-      string,
-      number
-    >;
-
-    for (const session of discoverySessions) {
-      const resolvedChannel = resolveChannelForSession(session);
-      if (resolvedChannel.channelId in counts) {
-        counts[resolvedChannel.channelId] = (counts[resolvedChannel.channelId] ?? 0) + 1;
-      }
-    }
-
-    return counts;
-  }, [channels, discoverySessions, resolveChannelForSession]);
 
   function activateProfile(id: string) {
     setProfiles((current) =>
@@ -412,11 +394,9 @@ export default function App() {
   const content = {
     dashboard: (
       <DashboardView
-        devices={mockDevices}
-        selectedOutputId={selectedOutputId}
-        selectedInputId={selectedInputId}
-        onSelectOutput={setSelectedOutputId}
-        onSelectInput={setSelectedInputId}
+        audappChannelEndpoints={audappChannelEndpoints}
+        devices={discoveryDevices}
+        sessions={sessionViews}
         channels={channels}
         onVolumeChange={(id, value) =>
           updateChannel(id, (ch) => ({
@@ -443,7 +423,6 @@ export default function App() {
         resolveChannelForSession={resolveChannelForSession}
         routeIntentOptions={routeIntentOptions}
         routeCapability={sessionRouteCapability.capability}
-        assignmentCountsByChannel={assignmentCountsByChannel}
         outputDevices={outputDevices}
         onRouteIntentChange={(session, intent) => {
           if (intent === "system") {

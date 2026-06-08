@@ -46,3 +46,18 @@ export interface RoutingStatus {
   restoreAvailable: boolean;
   lastError: string | null;
 }
+
+export interface SavedOutputDevicePreference {
+  endpointId: string;
+  name: string;
+  lastSeenAt: string;
+}
+
+export interface OutputPreferencesStatus {
+  primaryOutput: SavedOutputDevicePreference | null;
+  fallbackOutput: SavedOutputDevicePreference | null;
+  resolvedOutputId: string | null;
+  resolvedOutputName: string | null;
+  resolutionReason: string | null;
+  resolutionMessage: string | null;
+}

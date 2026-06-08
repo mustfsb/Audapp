@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::gain::{GAIN_DB_MAX, GAIN_DB_MIN};
 use super::types::DspRuntimeConfig;
 
 const CONFIG_FILE_NAME: &str = "engine-lab-dsp-config.json";
@@ -66,8 +67,8 @@ pub fn reset_persisted_dsp_config(data_dir: &Path) -> Result<(), String> {
 }
 
 fn clamp_config(mut config: DspRuntimeConfig) -> DspRuntimeConfig {
-    config.output_gain_db = config.output_gain_db.clamp(-24.0, 12.0);
-    config.input_gain_db = config.input_gain_db.clamp(-24.0, 12.0);
+    config.output_gain_db = config.output_gain_db.clamp(GAIN_DB_MIN, GAIN_DB_MAX);
+    config.input_gain_db = config.input_gain_db.clamp(GAIN_DB_MIN, GAIN_DB_MAX);
     config.high_pass_hz = config.high_pass_hz.clamp(20.0, 300.0);
     config.low_pass_hz = config.low_pass_hz.clamp(4000.0, 20000.0);
     for band in &mut config.eq_bands {
@@ -139,7 +140,22 @@ mod tests {
         let raw = r#"{"schemaVersion":1,"savedAt":"2026-01-01T00:00:00Z","dsp":{"enabled":true,"outputGainDb":999.0,"inputGainDb":0.0,"highPassEnabled":false,"highPassHz":80.0,"lowPassEnabled":false,"lowPassHz":18000.0,"limiterEnabled":true,"eqEnabled":false,"eqPreset":"flat","eqBands":[{"id":"band_100hz","frequencyHz":100.0,"gainDb":0.0,"enabled":true},{"id":"band_250hz","frequencyHz":250.0,"gainDb":0.0,"enabled":true},{"id":"band_1000hz","frequencyHz":1000.0,"gainDb":0.0,"enabled":true},{"id":"band_4000hz","frequencyHz":4000.0,"gainDb":0.0,"enabled":true},{"id":"band_10000hz","frequencyHz":10000.0,"gainDb":0.0,"enabled":true}]}}"#;
         fs::write(dir.join(CONFIG_FILE_NAME), raw).unwrap();
         let config = load_dsp_config(&dir);
-        assert!(config.output_gain_db <= 12.0, "output_gain clamped to max");
+        assert_eq!(config.output_gain_db, 24.0, "output_gain clamped to +24 dB");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn persisted_output_gain_preserves_negative_and_positive_full_range() {
+        let dir = temp_dir();
+        let mut config = DspRuntimeConfig::default();
+        config.output_gain_db = 24.0;
+        config.input_gain_db = -24.0;
+
+        save_dsp_config(&dir, &config).unwrap();
+        let loaded = load_dsp_config(&dir);
+
+        assert_eq!(loaded.output_gain_db, 24.0);
+        assert_eq!(loaded.input_gain_db, -24.0);
         fs::remove_dir_all(&dir).ok();
     }
 

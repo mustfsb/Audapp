@@ -1,5 +1,6 @@
 use crate::audio::{classify_audapp_endpoint, AudappEndpointKind};
 use crate::audio::AudioDiscoveryDevice;
+use crate::audio_policy::SavedOutputDevicePreference;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderEndpointInfo {
@@ -169,6 +170,33 @@ fn render_endpoint_info_from_device(device: &AudioDiscoveryDevice) -> RenderEndp
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedPhysicalOutputCandidate {
+    pub endpoint: RenderEndpointInfo,
+    pub resolution_reason: Option<String>,
+    pub resolution_message: Option<String>,
+}
+
+fn find_preferred_physical_output(
+    devices: &[AudioDiscoveryDevice],
+    preference: &SavedOutputDevicePreference,
+) -> Option<RenderEndpointInfo> {
+    if let Some(device) = devices
+        .iter()
+        .find(|device| device.id == preference.endpoint_id && is_active_physical_output(device))
+    {
+        return Some(render_endpoint_info_from_device(device));
+    }
+
+    devices
+        .iter()
+        .find(|device| {
+            is_active_physical_output(device)
+                && (device.name == preference.name || device.name.eq_ignore_ascii_case(&preference.name))
+        })
+        .map(render_endpoint_info_from_device)
+}
+
 /// Resolve the physical (non-Audapp) render output the multi-channel bridge must
 /// render its mixed audio to.
 ///
@@ -220,9 +248,65 @@ pub fn resolve_physical_output_candidate(
     )
 }
 
+pub fn resolve_physical_output_candidate_with_preferences(
+    devices: &[AudioDiscoveryDevice],
+    primary_output: Option<&SavedOutputDevicePreference>,
+    fallback_output: Option<&SavedOutputDevicePreference>,
+    previous_restore_target_id: Option<&str>,
+    current_default_id: Option<&str>,
+) -> Result<ResolvedPhysicalOutputCandidate, String> {
+    if let Some(primary) = primary_output {
+        if let Some(endpoint) = find_preferred_physical_output(devices, primary) {
+            return Ok(ResolvedPhysicalOutputCandidate {
+                endpoint,
+                resolution_reason: Some("primary".to_string()),
+                resolution_message: None,
+            });
+        }
+    }
+
+    if let Some(fallback) = fallback_output {
+        if let Some(endpoint) = find_preferred_physical_output(devices, fallback) {
+            return Ok(ResolvedPhysicalOutputCandidate {
+                resolution_reason: Some("fallback".to_string()),
+                resolution_message: primary_output.map(|_| {
+                    format!("Primary output not found. Using fallback: {}.", endpoint.name)
+                }),
+                endpoint,
+            });
+        }
+    }
+
+    let had_preferences = primary_output.is_some() || fallback_output.is_some();
+    let resolved = resolve_physical_output_candidate(
+        devices,
+        None,
+        previous_restore_target_id,
+        current_default_id,
+    )?;
+
+    Ok(ResolvedPhysicalOutputCandidate {
+        resolution_reason: if had_preferences {
+            Some("auto".to_string())
+        } else {
+            None
+        },
+        resolution_message: if had_preferences {
+            Some(format!(
+                "Preferred outputs unavailable. Using {}.",
+                resolved.name
+            ))
+        } else {
+            None
+        },
+        endpoint: resolved,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio_policy::SavedOutputDevicePreference;
 
     fn endpoint(id: &str, name: &str) -> RenderEndpointInfo {
         RenderEndpointInfo {
@@ -414,5 +498,69 @@ mod tests {
             .expect_err("must fail closed");
 
         assert!(error.contains("No active physical"), "{error}");
+    }
+
+    fn preference(id: &str, name: &str) -> SavedOutputDevicePreference {
+        SavedOutputDevicePreference {
+            endpoint_id: id.to_string(),
+            name: name.to_string(),
+            last_seen_at: "2026-06-08T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn preference_resolver_prefers_saved_primary_then_fallback_before_restore_default() {
+        let mut devices = live_like_devices();
+        devices.push(output("usb-id", "Speakers (USB Audio Device)", false, None));
+        devices.push(output("hdmi-id", "Monitor (HDMI Audio)", false, None));
+
+        let resolved = resolve_physical_output_candidate_with_preferences(
+            &devices,
+            Some(&preference("usb-id", "Speakers (USB Audio Device)")),
+            Some(&preference("hdmi-id", "Monitor (HDMI Audio)")),
+            Some("hda-id"),
+            Some("input-id"),
+        )
+        .expect("primary output");
+
+        assert_eq!(resolved.endpoint.id, "usb-id");
+        assert_eq!(resolved.resolution_reason.as_deref(), Some("primary"));
+        assert!(resolved.resolution_message.is_none());
+
+        let resolved = resolve_physical_output_candidate_with_preferences(
+            &devices,
+            Some(&preference("missing-id", "Missing Speakers")),
+            Some(&preference("hdmi-id", "Monitor (HDMI Audio)")),
+            Some("hda-id"),
+            Some("input-id"),
+        )
+        .expect("fallback output");
+
+        assert_eq!(resolved.endpoint.id, "hdmi-id");
+        assert_eq!(resolved.resolution_reason.as_deref(), Some("fallback"));
+        assert_eq!(
+            resolved.resolution_message.as_deref(),
+            Some("Primary output not found. Using fallback: Monitor (HDMI Audio).")
+        );
+    }
+
+    #[test]
+    fn preference_resolver_rejects_audapp_primary_and_fallback_preferences() {
+        let devices = live_like_devices();
+
+        let resolved = resolve_physical_output_candidate_with_preferences(
+            &devices,
+            Some(&preference("general-id", "HoparlÃ¶r (Audapp General)")),
+            Some(&preference("browser-id", "HoparlÃ¶r (Audapp Browser)")),
+            None,
+            Some("input-id"),
+        )
+        .expect("physical output");
+
+        assert_eq!(resolved.endpoint.id, "hda-id");
+        assert_eq!(resolved.resolution_reason.as_deref(), Some("auto"));
+        let message = resolved.resolution_message.expect("resolution message");
+        assert!(message.contains("Preferred outputs unavailable."));
+        assert!(message.contains("High Definition Audio Device"));
     }
 }

@@ -1,6 +1,25 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::audio_bridge::BridgeState;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedOutputDevicePreference {
+    pub endpoint_id: String,
+    pub name: String,
+    pub last_seen_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputPreferencesStatus {
+    pub primary_output: Option<SavedOutputDevicePreference>,
+    pub fallback_output: Option<SavedOutputDevicePreference>,
+    pub resolved_output_id: Option<String>,
+    pub resolved_output_name: Option<String>,
+    pub resolution_reason: Option<String>,
+    pub resolution_message: Option<String>,
+}
 
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]

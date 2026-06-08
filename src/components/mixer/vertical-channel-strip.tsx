@@ -1,8 +1,15 @@
-import { VolumeOff, Volume2, Headphones } from "lucide-react";
+import { Gamepad2, Globe, Headphones, Music, Volume2, VolumeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
+
+const CHANNEL_ICONS: Record<string, React.ElementType> = {
+  general: Volume2,
+  game: Gamepad2,
+  music: Music,
+  browser: Globe,
+};
 
 export type MixerChannelStripProps = {
   channelId: string;
@@ -11,7 +18,7 @@ export type MixerChannelStripProps = {
   muted: boolean;
   solo?: boolean;
   mutedBySolo?: boolean;
-  activeSessionCount: number;
+  apps: Array<{ name: string; hasWarning: boolean }>;
   onVolumeChange: (value: number) => void;
   onVolumeCommit: (value: number) => void;
   onMuteToggle: () => void;
@@ -21,12 +28,13 @@ export type MixerChannelStripProps = {
 };
 
 export function VerticalChannelStrip({
+  channelId,
   name,
   volumePercent,
   muted,
   solo = false,
   mutedBySolo = false,
-  activeSessionCount,
+  apps,
   onVolumeChange,
   onVolumeCommit,
   onMuteToggle,
@@ -34,91 +42,74 @@ export function VerticalChannelStrip({
   error,
   isPending,
 }: MixerChannelStripProps) {
+  const Icon = CHANNEL_ICONS[channelId] ?? Volume2;
+  const hasAnyWarning = apps.some((a) => a.hasWarning);
+
   return (
     <div
       className={cn(
-        "flex w-28 shrink-0 flex-col items-center gap-3 rounded-xl bg-card px-3 py-4",
+        "px-4 py-3 transition-opacity",
         isPending && "opacity-60",
-        mutedBySolo && !solo && "opacity-50",
+        mutedBySolo && !solo && "opacity-40",
       )}
     >
-      {/* Name + session count */}
-      <div className="w-full space-y-0.5 text-center">
-        <p className="truncate text-xs font-medium leading-tight">{name}</p>
-        <p className="text-[10px] text-muted-foreground">
-          {activeSessionCount === 0
-            ? "—"
-            : `${activeSessionCount} app${activeSessionCount !== 1 ? "s" : ""}`}
-        </p>
-      </div>
-
-      {/* State badges */}
-      {(solo || mutedBySolo) && (
-        <div className="flex flex-wrap justify-center gap-1">
-          {solo && (
-            <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-blue-500/20 text-blue-600 dark:text-blue-400">
-              Solo
-            </span>
-          )}
-          {mutedBySolo && !solo && (
-            <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-amber-500/20 text-amber-600 dark:text-amber-400">
-              Muted
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Fader */}
-      <div className="flex flex-1 flex-col items-center gap-2">
-        <span className="text-[10px] tabular-nums text-muted-foreground">{volumePercent}%</span>
+      <div className="flex items-center gap-3">
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="w-16 shrink-0 text-sm font-medium">{name}</span>
         <Slider
-          orientation="vertical"
-          className="h-44"
+          className="flex-1"
           value={[volumePercent]}
+          min={0}
           max={100}
           step={1}
           disabled={isPending || mutedBySolo}
           onValueChange={(values) => onVolumeChange(values[0] ?? volumePercent)}
           onValueCommit={(values) => onVolumeCommit(values[0] ?? volumePercent)}
         />
+        <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">
+          {volumePercent}%
+        </span>
+        {onSoloToggle && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "size-7 shrink-0",
+              solo
+                ? "bg-blue-500/20 text-blue-600 hover:bg-blue-500/30 dark:text-blue-400"
+                : "text-muted-foreground",
+            )}
+            disabled={isPending}
+            aria-label={solo ? `Unsolo ${name}` : `Solo ${name}`}
+            onClick={onSoloToggle}
+          >
+            <Headphones className="size-3.5" />
+          </Button>
+        )}
+        <Button
+          variant={muted ? "destructive" : "ghost"}
+          size="icon"
+          className={cn("size-7 shrink-0", !muted && "text-muted-foreground")}
+          disabled={isPending}
+          aria-label={muted ? `Unmute ${name}` : `Mute ${name}`}
+          onClick={onMuteToggle}
+        >
+          {muted ? <VolumeOff className="size-3.5" /> : <Volume2 className="size-3.5" />}
+        </Button>
+      </div>
+
+      <div className="mt-1 flex items-center gap-1.5 pl-7">
+        {hasAnyWarning && (
+          <span className="inline-block size-1.5 shrink-0 rounded-full bg-amber-500" />
+        )}
+        <p className="truncate text-[11px] text-muted-foreground">
+          {apps.length === 0 ? "No apps" : apps.map((a) => a.name).join(" · ")}
+        </p>
       </div>
 
       {error && (
-        <p className="w-full rounded-lg bg-destructive/10 px-2 py-1 text-center text-[10px] leading-tight text-destructive">
-          {error}
-        </p>
+        <p className="mt-1 pl-7 text-[11px] text-destructive">{error}</p>
       )}
-
-      {/* Solo button */}
-      {onSoloToggle && (
-        <Button
-          variant={solo ? "default" : "ghost"}
-          size="icon-sm"
-          className={cn(
-            "size-8",
-            solo
-              ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30 border-none"
-              : "text-muted-foreground",
-          )}
-          disabled={isPending}
-          aria-label={solo ? `Unsolo ${name}` : `Solo ${name}`}
-          onClick={onSoloToggle}
-        >
-          <Headphones className="size-3.5" />
-        </Button>
-      )}
-
-      {/* Mute button */}
-      <Button
-        variant={muted ? "destructive" : "ghost"}
-        size="icon-sm"
-        className={cn("size-8", !muted && "text-muted-foreground")}
-        disabled={isPending}
-        aria-label={muted ? `Unmute ${name}` : `Mute ${name}`}
-        onClick={onMuteToggle}
-      >
-        {muted ? <VolumeOff className="size-3.5" /> : <Volume2 className="size-3.5" />}
-      </Button>
     </div>
   );
 }

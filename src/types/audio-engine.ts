@@ -64,6 +64,11 @@ export type DspRuntimeConfig = {
   eqBands: EqBandConfig[];
 };
 
+/** Full per-channel DSP config: the master DSP config plus a channel id. */
+export type ChannelDspConfig = DspRuntimeConfig & {
+  channelId: string;
+};
+
 export type DspRuntimeStatus = {
   enabled: boolean;
   activeInEngine: boolean;

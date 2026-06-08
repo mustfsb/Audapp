@@ -65,6 +65,8 @@ struct SourceStream {
     sum_sq: f64,
     sample_count: u64,
     dropped_frames: u64,
+    /// Per-channel DSP (EQ/filters/gain) applied before this source is mixed.
+    dsp: crate::audio_engine::dsp::DspPipeline,
 }
 
 #[cfg(windows)]
@@ -236,6 +238,7 @@ fn run_multichannel_bridge_worker_windows(args: MultichannelWorkerArgs) {
                     sum_sq: 0.0,
                     sample_count: 0,
                     dropped_frames: 0,
+                    dsp: crate::audio_engine::dsp::DspPipeline::new(),
                 });
             }
             Err(error) => {
@@ -359,6 +362,22 @@ fn run_multichannel_bridge_worker_windows(args: MultichannelWorkerArgs) {
         monitor.bits_per_sample,
     );
 
+    // Per-channel DSP: each source runs through its own pipeline (prepared at the
+    // monitor sample rate, since source buffers are resampled to it) before mixing.
+    for source in &mut sources {
+        if let Some(channel_shared) =
+            crate::audio_bridge::channel_dsp::channel_dsp_shared(source.channel_id)
+        {
+            source.dsp.prepare(
+                monitor.out_rate as f32,
+                source.channels,
+                channel_shared,
+                source.is_float,
+                source.bits_per_sample,
+            );
+        }
+    }
+
     loop {
         if args.stop_flag.load(Ordering::Relaxed) {
             break;
@@ -465,30 +484,40 @@ fn run_multichannel_bridge_worker_windows(args: MultichannelWorkerArgs) {
             render_out.resize(output_samples, 0.0);
 
             for source in &mut sources {
-                let available_source_frames = (source.buffer.len().saturating_sub(source.read_index))
-                    / source.channels.max(1);
-                let gain = channel_gain_linear(source.channel_id).unwrap_or(1.0);
+                source.dsp.maybe_refresh();
+                let src_channels = source.channels.max(1);
+                let available_source_frames =
+                    (source.buffer.len().saturating_sub(source.read_index)) / src_channels;
+                // Mixer channel volume/mute (separate from per-channel EQ/gain).
+                let vol_gain = channel_gain_linear(source.channel_id).unwrap_or(1.0);
+                let source_frames_to_mix = available_source_frames.min(available_frames);
 
-                if gain > 0.0 {
-                    let source_frames_to_mix = available_source_frames.min(available_frames);
-                    for frame_index in 0..source_frames_to_mix {
-                        let start = source.read_index + frame_index * source.channels;
-                        let end = start + source.channels;
-                        let frame = &source.buffer[start..end];
+                for frame_index in 0..source_frames_to_mix {
+                    let start = source.read_index + frame_index * src_channels;
+                    // Per-channel DSP applied in place, BEFORE mixing. Done even when
+                    // this channel is muted/zero-gain so filter state stays continuous.
+                    for ci in 0..src_channels {
+                        let input = source.buffer[start + ci];
+                        let processed = source.dsp.process_channel_sample(input, ci);
+                        source.buffer[start + ci] = processed;
+                    }
+                    if vol_gain > 0.0 {
+                        let frame = &source.buffer[start..start + src_channels];
                         for out_ch in 0..monitor.out_channels {
                             let sample = crate::audio_engine::routing::sample_for_output_channel(
                                 frame,
-                                source.channels,
+                                src_channels,
                                 out_ch,
                                 monitor.out_channels,
                             );
-                            render_out[frame_index * monitor.out_channels + out_ch] += sample * gain;
+                            render_out[frame_index * monitor.out_channels + out_ch] +=
+                                sample * vol_gain;
                         }
                     }
                 }
 
-                let consumed_frames = available_source_frames.min(available_frames);
-                source.read_index += consumed_frames * source.channels;
+                let consumed_frames = source_frames_to_mix;
+                source.read_index += consumed_frames * src_channels;
                 if source.read_index > source.buffer.capacity() / 2 {
                     source.buffer.drain(..source.read_index);
                     source.read_index = 0;
@@ -581,6 +610,7 @@ fn run_multichannel_bridge_worker_windows(args: MultichannelWorkerArgs) {
 
     dsp_pipeline.deactivate();
     for source in &sources {
+        source.dsp.deactivate();
         let _ = unsafe { source.client.Stop() };
     }
     let _ = unsafe { monitor.client.Stop() };

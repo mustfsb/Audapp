@@ -1,3 +1,4 @@
+pub mod channel_dsp;
 mod endpoints;
 mod manager;
 mod multichannel_manager;
@@ -11,8 +12,9 @@ mod worker;
 pub use endpoints::{
     is_active_physical_output, is_audapp_endpoint_name, is_audapp_render_device,
     is_legacy_input_name, require_multichannel_endpoints, resolve_audapp_render_endpoints,
-    resolve_physical_output_candidate, EndpointResolutionError, RenderEndpointInfo,
-    ResolvedAudappRenderEndpoints,
+    resolve_physical_output_candidate, resolve_physical_output_candidate_with_preferences,
+    EndpointResolutionError, RenderEndpointInfo, ResolvedAudappRenderEndpoints,
+    ResolvedPhysicalOutputCandidate,
 };
 pub use manager::{
     bridge_list_candidates, bridge_shutdown, bridge_start, bridge_status, bridge_stop,
